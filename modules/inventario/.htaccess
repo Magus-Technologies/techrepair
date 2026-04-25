@@ -1,0 +1,7 @@
+# Permitir acceso directo a archivos PHP en esta carpeta
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+</IfModule>
+Options -Indexes
