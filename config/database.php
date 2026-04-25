@@ -7,16 +7,19 @@ define('DB_USER', 'root');
 define('DB_PASS', 'c4p1cu4$$');
 define('DB_CHARSET', 'utf8mb4');
 
-// Auto-detectar dominio y protocolo (funciona en localhost Y en servidor real)
+// Auto-detectar dominio y protocolo (funciona en vhost, localhost subdir y servidor real)
 $_protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $_host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$_script   = $_SERVER['SCRIPT_NAME'] ?? '/techrepair/index.php';
 
-// Obtener la carpeta raíz del proyecto (primer segmento del path, ej: "techrepair")
-$_parts = explode('/', trim($_script, '/'));
-$_root  = $_parts[0] ?? 'techrepair';
+// Calcular subdirectorio comparando la raíz del proyecto con el DocumentRoot del servidor
+$_project_root = str_replace('\\', '/', realpath(__DIR__ . '/..'));
+$_doc_root     = str_replace('\\', '/', realpath($_SERVER['DOCUMENT_ROOT'] ?? ''));
+$_subdir = '';
+if ($_project_root && $_doc_root && strpos($_project_root, $_doc_root) === 0) {
+    $_subdir = substr($_project_root, strlen($_doc_root));
+}
 
-define('BASE_URL',    $_protocol . '://' . $_host . '/' . $_root . '/');
+define('BASE_URL',    $_protocol . '://' . $_host . rtrim($_subdir, '/') . '/');
 define('BASE_PATH',   dirname(__DIR__) . '/');
 define('UPLOAD_PATH', BASE_PATH . 'assets/img/uploads/');
 define('UPLOAD_URL',  BASE_URL  . 'assets/img/uploads/');
