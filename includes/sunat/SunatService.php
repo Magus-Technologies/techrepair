@@ -1,0 +1,217 @@
+<?php
+/**
+ * SunatService — Orquesta el flujo de facturación electrónica en DOS pasos.
+ *
+ *   1) generarXml($ventaId)   → llama /generar/comprobante, guarda XML+hash+qr,
+ *                              deja sunat_estado = 'pendiente'.
+ *   2) enviarSunat($ventaId)  → toma el XML guardado, llama /enviar/documento/electronico,
+ *                              guarda CDR, deja sunat_estado = 'aceptado' | 'rechazado'.
+ */
+require_once __DIR__ . '/SunatClient.php';
+require_once __DIR__ . '/SunatBuilder.php';
+
+class SunatService
+{
+    private PDO          $db;
+    private SunatClient  $client;
+
+    public function __construct(PDO $db, ?SunatClient $client = null)
+    {
+        $this->db     = $db;
+        $this->client = $client ?? new SunatClient();
+    }
+
+    // ─── PASO 1: GENERAR XML ──────────────────────────────────────
+    public function generarXml(int $ventaId): array
+    {
+        $venta = $this->fetchVenta($ventaId);
+        if (!$venta) {
+            return ['ok' => false, 'mensaje' => "Venta #$ventaId no encontrada."];
+        }
+        if (!in_array($venta['tipo_doc'], ['factura', 'boleta'], true)) {
+            return ['ok' => false, 'mensaje' => "Tipo '{$venta['tipo_doc']}' no se emite a SUNAT."];
+        }
+        if (empty($venta['serie_doc']) || empty($venta['num_doc'])) {
+            return ['ok' => false, 'mensaje' => 'La venta no tiene serie/numero asignados.'];
+        }
+
+        $cliente = $this->fetchCliente((int) ($venta['cliente_id'] ?? 0));
+        $items   = $this->fetchItems($ventaId);
+
+        try {
+            $payload = SunatBuilder::buildComprobante($venta, $cliente, $items);
+        } catch (Throwable $e) {
+            $this->marcarRechazada($ventaId, $e->getMessage());
+            return ['ok' => false, 'mensaje' => $e->getMessage()];
+        }
+
+        $gen = $this->client->generarComprobante($payload);
+        if (empty($gen['estado'])) {
+            $msg = $gen['mensaje'] ?? 'Error al generar XML.';
+            $this->marcarRechazada($ventaId, $msg);
+            return ['ok' => false, 'mensaje' => $msg, 'detalle' => $gen];
+        }
+
+        $hash   = $gen['data']['hash']          ?? '';
+        $qrInfo = $gen['data']['qr_info']       ?? '';
+        $xml    = $gen['data']['contenido_xml'] ?? '';
+
+        $this->marcarPendiente($ventaId, $hash, $qrInfo, $xml);
+
+        return [
+            'ok'      => true,
+            'mensaje' => 'XML generado correctamente. Listo para enviar a SUNAT.',
+            'hash'    => $hash,
+            'qr'      => $qrInfo,
+        ];
+    }
+
+    // ─── PASO 2: ENVIAR A SUNAT ───────────────────────────────────
+    public function enviarSunat(int $ventaId): array
+    {
+        $venta = $this->fetchVenta($ventaId);
+        if (!$venta) {
+            return ['ok' => false, 'mensaje' => "Venta #$ventaId no encontrada."];
+        }
+        if (empty($venta['sunat_xml'])) {
+            return ['ok' => false, 'mensaje' => 'Esta venta no tiene XML generado todavía.'];
+        }
+        if ($venta['sunat_estado'] === 'aceptado') {
+            return ['ok' => false, 'mensaje' => 'Esta venta ya fue aceptada por SUNAT.'];
+        }
+
+        $nombreArchivo = self::nombreArchivo($venta);
+
+        $env = $this->client->enviarDocumento([
+            'ruc'                 => SUNAT_RUC,
+            'usuario'             => SUNAT_USUARIO_SOL,
+            'clave'               => SUNAT_CLAVE_SOL,
+            'endpoint'            => SUNAT_ENDPOINT,
+            'nombre_documento'    => $nombreArchivo,
+            'contenido_documento' => $venta['sunat_xml'],
+        ]);
+
+        if (empty($env['estado'])) {
+            $msg = $env['mensaje'] ?? 'Error al enviar a SUNAT.';
+            $this->marcarRechazada(
+                $ventaId, $msg,
+                $venta['sunat_hash'] ?? '',
+                $venta['sunat_qr']   ?? '',
+                $venta['sunat_xml']  ?? ''
+            );
+            return ['ok' => false, 'mensaje' => $msg, 'detalle' => $env];
+        }
+
+        $this->marcarAceptada(
+            $ventaId,
+            $venta['sunat_hash'] ?? '',
+            $venta['sunat_qr']   ?? '',
+            $venta['sunat_xml']  ?? '',
+            $env['cdr']     ?? '',
+            $env['mensaje'] ?? 'ACEPTADO'
+        );
+
+        return [
+            'ok'      => true,
+            'mensaje' => 'Comprobante aceptado por SUNAT.',
+            'cdr'     => $env['cdr'] ?? '',
+        ];
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────
+
+    public static function nombreArchivo(array $venta): string
+    {
+        $tipo = $venta['tipo_doc'] === 'factura' ? '01' : '03';
+        $num  = str_pad((string)$venta['num_doc'], 8, '0', STR_PAD_LEFT);
+        return SUNAT_RUC . '-' . $tipo . '-' . $venta['serie_doc'] . '-' . $num;
+    }
+
+    /**
+     * Calcula el siguiente correlativo libre para una serie dada.
+     */
+    public static function siguienteNumero(PDO $db, string $serie): int
+    {
+        $st = $db->prepare("SELECT COALESCE(MAX(CAST(num_doc AS UNSIGNED)),0)+1 FROM ventas WHERE serie_doc=?");
+        $st->execute([$serie]);
+        return (int) $st->fetchColumn();
+    }
+
+    // ─── Persistencia ────────────────────────────────────────────────
+
+    private function marcarPendiente(int $id, string $hash, string $qr, string $xml): void
+    {
+        $st = $this->db->prepare("
+            UPDATE ventas SET
+                sunat_estado='pendiente',
+                sunat_hash=?,
+                sunat_qr=?,
+                sunat_xml=?,
+                sunat_cdr=NULL,
+                sunat_mensaje='XML generado, pendiente de envío.',
+                sunat_fecha=NOW()
+            WHERE id=?
+        ");
+        $st->execute([$hash, $qr, $xml, $id]);
+    }
+
+    private function marcarAceptada(int $id, string $hash, string $qr, string $xml, string $cdr, string $msg): void
+    {
+        $st = $this->db->prepare("
+            UPDATE ventas SET
+                sunat_estado='aceptado',
+                sunat_hash=?,
+                sunat_qr=?,
+                sunat_xml=?,
+                sunat_cdr=?,
+                sunat_mensaje=?,
+                sunat_fecha=NOW()
+            WHERE id=?
+        ");
+        $st->execute([$hash, $qr, $xml, $cdr, $msg, $id]);
+    }
+
+    private function marcarRechazada(int $id, string $msg, string $hash = '', string $qr = '', string $xml = ''): void
+    {
+        $st = $this->db->prepare("
+            UPDATE ventas SET
+                sunat_estado='rechazado',
+                sunat_hash=?,
+                sunat_qr=?,
+                sunat_xml=?,
+                sunat_mensaje=?,
+                sunat_fecha=NOW()
+            WHERE id=?
+        ");
+        $st->execute([$hash, $qr, $xml, mb_substr($msg, 0, 1000), $id]);
+    }
+
+    // ─── Lecturas ────────────────────────────────────────────────────
+
+    private function fetchVenta(int $id): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM ventas WHERE id=?");
+        $st->execute([$id]);
+        return $st->fetch() ?: null;
+    }
+
+    private function fetchCliente(int $id): array
+    {
+        if ($id <= 0) return [];
+        $st = $this->db->prepare("SELECT * FROM clientes WHERE id=?");
+        $st->execute([$id]);
+        return $st->fetch() ?: [];
+    }
+
+    private function fetchItems(int $ventaId): array
+    {
+        $st = $this->db->prepare("
+            SELECT vd.*, p.nombre AS prod_nombre, p.codigo AS prod_codigo
+            FROM venta_detalle vd
+            JOIN productos p ON p.id = vd.producto_id
+            WHERE vd.venta_id=? ORDER BY vd.id
+        ");
+        $st->execute([$ventaId]);
+        return $st->fetchAll();
+    }
+}

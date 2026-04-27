@@ -59,6 +59,10 @@
     <a href="<?= BASE_URL ?>modules/ventas/index.php" class="tr-nav-item">
       <i data-feather="list"></i><span>Historial ventas</span>
     </a>
+    <a href="<?= BASE_URL ?>modules/facturacion/index.php"
+       class="tr-nav-item <?= strpos($_SERVER['REQUEST_URI'],'facturacion')!==false?'active':'' ?>">
+      <i data-feather="file-text"></i><span>Facturación SUNAT</span>
+    </a>
     <?php endif; ?>
 
     <?php if(in_array($rol,[ROL_ADMIN,ROL_TECNICO])): ?>
