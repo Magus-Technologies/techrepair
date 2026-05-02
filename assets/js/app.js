@@ -22,50 +22,48 @@ document.addEventListener('click', e => {
 // ══════════════════════════════════════════════════════════
 // SIDEBAR — Desktop collapse + Mobile drawer
 // ══════════════════════════════════════════════════════════
-const sidebar  = document.getElementById('sidebar');
-const mainWrap = document.getElementById('main-content');
-const overlay  = document.getElementById('sidebar-overlay');
-const toggleBtn= document.getElementById('sidebar-toggle');
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar  = document.getElementById('sidebar');
+  const mainWrap = document.getElementById('main-content');
+  const overlay  = document.getElementById('sidebar-overlay');
+  const toggleBtnOld = document.getElementById('sidebar-toggle');
+  const toggleBtn = toggleBtnOld?.cloneNode(true);
+  toggleBtnOld?.parentNode?.replaceChild(toggleBtn, toggleBtnOld);
 
-function isMobile() { return window.innerWidth <= 991; }
+  function isMobile() { return window.innerWidth <= 991; }
 
-toggleBtn?.addEventListener('click', () => {
-  if (isMobile()) {
-    // Mobile: slide-in drawer
-    sidebar.classList.toggle('mobile-open');
-    overlay.classList.toggle('show');
-    document.body.style.overflow = sidebar.classList.contains('mobile-open') ? 'hidden' : '';
-  } else {
-    // Desktop: icon-only collapse
-    sidebar.classList.toggle('collapsed');
-    mainWrap?.classList.toggle('expanded');
-    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+  toggleBtn?.addEventListener('click', () => {
+    if (isMobile()) {
+      sidebar.classList.toggle('mobile-open');
+      overlay.classList.toggle('show');
+      document.body.style.overflow = sidebar.classList.contains('mobile-open') ? 'hidden' : '';
+    } else {
+      sidebar.classList.toggle('collapsed');
+      mainWrap?.classList.toggle('expanded');
+      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+    }
+  });
+
+  overlay?.addEventListener('click', closeMobileSidebar);
+
+  function closeMobileSidebar() {
+    sidebar?.classList.remove('mobile-open');
+    overlay?.classList.remove('show');
+    document.body.style.overflow = '';
   }
-});
 
-// Close drawer when overlay clicked
-overlay?.addEventListener('click', closeMobileSidebar);
+  document.querySelectorAll('.tr-nav-item').forEach(a => {
+    a.addEventListener('click', () => { if (isMobile()) closeMobileSidebar(); });
+  });
 
-function closeMobileSidebar() {
-  sidebar?.classList.remove('mobile-open');
-  overlay?.classList.remove('show');
-  document.body.style.overflow = '';
-}
+  window.addEventListener('resize', () => {
+    if (!isMobile()) closeMobileSidebar();
+  });
 
-// Close drawer when a nav link is clicked on mobile
-document.querySelectorAll('.tr-nav-item').forEach(a => {
-  a.addEventListener('click', () => { if (isMobile()) closeMobileSidebar(); });
-});
-
-// Restore desktop collapse state
-if (!isMobile() && localStorage.getItem('sidebarCollapsed') === '1') {
-  sidebar?.classList.add('collapsed');
-  mainWrap?.classList.add('expanded');
-}
-
-// Resize: clean up mobile state if resized to desktop
-window.addEventListener('resize', () => {
-  if (!isMobile()) closeMobileSidebar();
+  if (!isMobile() && localStorage.getItem('sidebarCollapsed') === '1') {
+    sidebar?.classList.add('collapsed');
+    mainWrap?.classList.add('expanded');
+  }
 });
 
 // ── Foto drag & drop upload ──────────────────────────────

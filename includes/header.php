@@ -19,6 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link href="<?= BASE_URL ?>assets/css/app.css" rel="stylesheet"/>
+  <script>window.BASE_URL = '<?= BASE_URL ?>';</script>
 </head>
 <body class="tr-body">
 
@@ -59,13 +60,18 @@
     <a href="<?= BASE_URL ?>modules/ventas/index.php" class="tr-nav-item">
       <i data-feather="list"></i><span>Historial ventas</span>
     </a>
-    <a href="<?= BASE_URL ?>modules/facturacion/index.php"
-       class="tr-nav-item <?= strpos($_SERVER['REQUEST_URI'],'facturacion')!==false?'active':'' ?>">
-      <i data-feather="file-text"></i><span>Facturación SUNAT</span>
-    </a>
     <?php endif; ?>
 
     <?php if(in_array($rol,[ROL_ADMIN,ROL_TECNICO])): ?>
+    <div class="tr-nav-group">Catálogo público</div>
+    <a href="<?= BASE_URL ?>modules/catalogo/index.php"
+       class="tr-nav-item <?= strpos($_SERVER['REQUEST_URI'],'catalogo')!==false?'active':'' ?>">
+      <i data-feather="shopping-bag"></i><span>Catálogo</span>
+    </a>
+    <a href="<?= BASE_URL ?>public/catalogo/" target="_blank" class="tr-nav-item">
+      <i data-feather="external-link"></i><span>Ver catálogo</span>
+    </a>
+
     <div class="tr-nav-group">Inventario</div>
     <a href="<?= BASE_URL ?>modules/inventario/index.php" class="tr-nav-item">
       <i data-feather="package"></i><span>Productos</span>
@@ -89,6 +95,14 @@
     <a href="<?= BASE_URL ?>modules/clientes/index.php" class="tr-nav-item">
       <i data-feather="users"></i><span>Clientes</span>
     </a>
+
+    <?php if(in_array($rol,[ROL_ADMIN,ROL_TECNICO])): ?>
+    <div class="tr-nav-group">Servicios</div>
+    <a href="<?= BASE_URL ?>modules/servicios/index.php"
+       class="tr-nav-item <?= strpos($_SERVER['REQUEST_URI'],'servicios')!==false?'active':'' ?>">
+      <i data-feather="briefcase"></i><span>Servicios</span>
+    </a>
+    <?php endif; ?>
 
     <?php if($rol === ROL_ADMIN): ?>
     <div class="tr-nav-group">Administración</div>

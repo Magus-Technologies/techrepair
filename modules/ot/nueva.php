@@ -89,18 +89,28 @@ require_once __DIR__ . '/../../includes/header.php';
       <div class="tr-card-body">
         <div id="bloque-cliente-existente">
           <label class="tr-form-label">Buscar cliente registrado *</label>
-          <select name="cliente_id" id="sel-cliente" class="form-select" required>
+          <input type="text" id="input-buscar-cliente" class="form-control mb-1" placeholder="Escribe nombre, código o teléfono..." autocomplete="off"/>
+          <div id="lista-clientes" style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;display:none;background:#fff;position:absolute;z-index:999;width:calc(100% - 2rem)"></div>
+          <select name="cliente_id" id="sel-cliente" class="form-select" required style="display:none">
             <option value="">— Seleccionar cliente —</option>
             <?php foreach($clientes as $c): ?>
             <option value="<?= $c['id'] ?>"><?= sanitize($c['codigo'].' — '.$c['nombre']) ?> <?= $c['telefono']?'('.$c['telefono'].')':'' ?></option>
             <?php endforeach; ?>
           </select>
+          <div id="cliente-seleccionado" class="small text-muted mt-1" style="display:none"></div>
         </div>
         <div id="bloque-cliente-nuevo" style="display:none">
           <div class="row g-2">
-            <div class="col-md-2"><label class="tr-form-label">Tipo</label><select name="cliente_tipo" class="form-select form-select-sm"><option value="persona">Persona</option><option value="empresa">Empresa</option></select></div>
-            <div class="col-md-4"><label class="tr-form-label">Nombre *</label><input type="text" name="cliente_nombre" class="form-control form-control-sm"/></div>
-            <div class="col-md-3"><label class="tr-form-label">DNI / RUC</label><input type="text" name="cliente_dni" class="form-control form-control-sm" maxlength="20"/></div>
+            <div class="col-md-2"><label class="tr-form-label">Tipo</label><select name="cliente_tipo" id="nuevo-cliente-tipo" class="form-select form-select-sm"><option value="persona">Persona</option><option value="empresa">Empresa</option></select></div>
+            <div class="col-md-3">
+              <label class="tr-form-label">DNI / RUC</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="cliente_dni" id="nuevo-cliente-dni" class="form-control form-control-sm" maxlength="11" inputmode="numeric" placeholder="8 o 11 dígitos"/>
+                <span class="input-group-text" id="nuevo-dni-spinner" style="display:none"><span class="spinner-border spinner-border-sm"></span></span>
+              </div>
+              <div id="nuevo-dni-msg" class="small mt-1"></div>
+            </div>
+            <div class="col-md-4"><label class="tr-form-label">Nombre *</label><input type="text" name="cliente_nombre" id="nuevo-cliente-nombre" class="form-control form-control-sm"/></div>
             <div class="col-md-3"><label class="tr-form-label">Teléfono</label><input type="text" name="cliente_tel" class="form-control form-control-sm"/></div>
             <div class="col-md-3"><label class="tr-form-label">WhatsApp</label><input type="text" name="cliente_wa" class="form-control form-control-sm" placeholder="51999..."/></div>
             <div class="col-md-5"><label class="tr-form-label">Correo</label><input type="email" name="cliente_email" class="form-control form-control-sm"/></div>
@@ -316,12 +326,84 @@ require_once __DIR__ . '/../../includes/header.php';
 <?php
 $pageScripts = <<<'JS'
 <script>
-// ── Toggle cliente nuevo/existente ───────────────────────
+// ── Buscador de cliente ──────────────────────────────────
+(function() {
+  const input    = document.getElementById('input-buscar-cliente');
+  const lista    = document.getElementById('lista-clientes');
+  const select   = document.getElementById('sel-cliente');
+  const info     = document.getElementById('cliente-seleccionado');
+  const opciones = Array.from(select.options).slice(1); // sin el placeholder
+
+  input.addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    lista.innerHTML = '';
+    if (!q) { lista.style.display = 'none'; return; }
+    const filtrados = opciones.filter(o => o.text.toLowerCase().includes(q)).slice(0, 20);
+    if (!filtrados.length) { lista.style.display = 'none'; return; }
+    filtrados.forEach(o => {
+      const div = document.createElement('div');
+      div.textContent = o.text;
+      div.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6';
+      div.addEventListener('mouseenter', () => div.style.background = '#f3f4f6');
+      div.addEventListener('mouseleave', () => div.style.background = '');
+      div.addEventListener('click', () => {
+        select.value = o.value;
+        input.value  = o.text;
+        info.textContent = '✓ ' + o.text;
+        info.style.display = '';
+        lista.style.display = 'none';
+      });
+      lista.appendChild(div);
+    });
+    lista.style.display = '';
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !lista.contains(e.target)) lista.style.display = 'none';
+  });
+})();
+
 function toggleNuevoCliente(nuevo) {
   document.getElementById('bloque-cliente-existente').style.display = nuevo ? 'none' : '';
   document.getElementById('bloque-cliente-nuevo').style.display     = nuevo ? ''     : 'none';
   document.getElementById('sel-cliente').required = !nuevo;
 }
+
+// ── API DNI/RUC para cliente nuevo ──────────────────────
+(function() {
+  const inputDoc    = document.getElementById('nuevo-cliente-dni');
+  const inputNombre = document.getElementById('nuevo-cliente-nombre');
+  const inputTipo   = document.getElementById('nuevo-cliente-tipo');
+  const spinner     = document.getElementById('nuevo-dni-spinner');
+  const msg         = document.getElementById('nuevo-dni-msg');
+
+  inputDoc.addEventListener('keypress', e => { if (!/\d/.test(e.key)) e.preventDefault(); });
+  inputDoc.addEventListener('input', () => { inputDoc.value = inputDoc.value.replace(/\D/g, ''); });
+
+  let timer = null;
+  inputDoc.addEventListener('input', function() {
+    clearTimeout(timer);
+    const doc = this.value.trim();
+    msg.textContent = '';
+    if (doc.length !== 8 && doc.length !== 11) return;
+    spinner.style.display = '';
+    timer = setTimeout(() => {
+      fetch(window.BASE_URL + 'modules/clientes/api_documento.php?doc=' + doc)
+        .then(r => r.json())
+        .then(data => {
+          spinner.style.display = 'none';
+          if (data.ok) {
+            inputNombre.value = data.nombre;
+            inputTipo.value   = data.tipo;
+            msg.innerHTML = '<span class="text-success">✓ Encontrado</span>';
+          } else {
+            msg.innerHTML = '<span class="text-danger">No encontrado</span>';
+          }
+        })
+        .catch(() => { spinner.style.display = 'none'; });
+    }, 400);
+  });
+})();
 
 // ── Firma y fotos ────────────────────────────────────────
 initFirma('firma-canvas', 'firma_cliente');

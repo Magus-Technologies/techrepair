@@ -10,7 +10,7 @@ $id   = (int)($_GET['id'] ?? 0);
 // Cargar OT
 $ot = $db->prepare("
     SELECT ot.*, c.nombre AS cliente_nombre, c.ruc_dni, c.telefono, c.whatsapp, c.email AS cliente_email,
-           te.nombre AS tipo_equipo, e.marca, e.modelo, e.serial, e.color, e.descripcion AS equipo_desc
+           te.nombre AS tipo_equipo, e.tipo_equipo_id, e.marca, e.modelo, e.serial, e.color, e.descripcion AS equipo_desc
     FROM ordenes_trabajo ot
     JOIN clientes c ON c.id = ot.cliente_id
     JOIN equipos e ON e.id = ot.equipo_id
@@ -57,8 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
 
     // Actualizar equipo
-    $db->prepare("UPDATE equipos SET marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
+    $db->prepare("UPDATE equipos SET tipo_equipo_id=?, marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
        ->execute([
+           (int)($_POST['tipo_equipo_id'] ?? $ot['tipo_equipo_id']),
            trim($_POST['equipo_marca']  ?? ''),
            trim($_POST['equipo_modelo'] ?? ''),
            trim($_POST['equipo_serial'] ?? ''),
@@ -134,12 +135,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="row g-2">
           <div class="col-md-4">
             <label class="tr-form-label">Tipo de equipo</label>
-            <select name="tipo_equipo_id" class="form-select" disabled>
+          <select name="tipo_equipo_id" class="form-select">
               <?php foreach($tiposEquipo as $t): ?>
-              <option value="<?= $t['id'] ?>" <?= $ot['equipo_id'] ? '' : '' ?>><?= sanitize($t['nombre']) ?></option>
+              <option value="<?= $t['id'] ?>" <?= $t['id'] == $ot['tipo_equipo_id'] ? 'selected' : '' ?>><?= sanitize($t['nombre']) ?></option>
               <?php endforeach; ?>
             </select>
-            <div class="small text-muted mt-1">Para cambiar el tipo, crea una nueva OT</div>
           </div>
           <div class="col-md-4">
             <label class="tr-form-label">Marca</label>
