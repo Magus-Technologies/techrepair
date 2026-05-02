@@ -21,6 +21,7 @@ define('ESTADOS_OT', [
     'listo'         => ['label' => 'Listo',           'color' => 'success',   'icon' => 'check-circle'],
     'entregado'     => ['label' => 'Entregado',       'color' => 'primary',   'icon' => 'package'],
     'cancelado'     => ['label' => 'Cancelado',       'color' => 'danger',    'icon' => 'x-circle'],
+    'devolucion'    => ['label' => 'Devolución',      'color' => 'dark',      'icon' => 'corner-down-left'],
 ]);
 
 // ----------------------------------------------------------
@@ -81,6 +82,20 @@ function generarCodigoVenta(PDO $db): string {
     $stmt->execute([$anio]);
     $n = (int)$stmt->fetchColumn() + 1;
     return 'VTA-' . $anio . '-' . str_pad($n, 4, '0', STR_PAD_LEFT);
+}
+
+/**
+ * Obtiene el siguiente correlativo de forma atómica para el tipo dado.
+ * Usa UPDATE atómico para evitar duplicados en concurrencia.
+ * Devuelve ['serie' => 'B001', 'numero' => 5] o null si no hay serie activa.
+ */
+function siguienteCorrelativo(PDO $db, string $tipo): ?array {
+    $db->prepare("UPDATE documentos_empresa SET numero = numero + 1 WHERE tipo = ? AND activo = 1 LIMIT 1")
+       ->execute([$tipo]);
+    $st = $db->prepare("SELECT serie, numero FROM documentos_empresa WHERE tipo = ? AND activo = 1 LIMIT 1");
+    $st->execute([$tipo]);
+    $row = $st->fetch();
+    return $row ? ['serie' => $row['serie'], 'numero' => (int)$row['numero']] : null;
 }
 
 // ----------------------------------------------------------

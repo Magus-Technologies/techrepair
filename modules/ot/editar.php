@@ -1,4 +1,4 @@
-<?php
+  <?php
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/app.php';
 requireLogin();
@@ -10,7 +10,7 @@ $id   = (int)($_GET['id'] ?? 0);
 // Cargar OT
 $ot = $db->prepare("
     SELECT ot.*, c.nombre AS cliente_nombre, c.ruc_dni, c.telefono, c.whatsapp, c.email AS cliente_email,
-           te.nombre AS tipo_equipo, e.marca, e.modelo, e.serial, e.color, e.descripcion AS equipo_desc
+           te.nombre AS tipo_equipo, e.tipo_equipo_id, e.marca, e.modelo, e.serial, e.color, e.descripcion AS equipo_desc
     FROM ordenes_trabajo ot
     JOIN clientes c ON c.id = ot.cliente_id
     JOIN equipos e ON e.id = ot.equipo_id
@@ -22,6 +22,15 @@ if (!$ot) { setFlash('danger','OT no encontrada'); redirect(BASE_URL.'modules/ot
 
 // Guardar cambios
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Si viene cliente nuevo, crearlo primero
+    $cliente_id = (int)($_POST['cliente_id'] ?? 0);
+    if (!$cliente_id && !empty($_POST['cliente_nombre'])) {
+        $cCodigo = generarCodigoCliente($db);
+        $db->prepare("INSERT INTO clientes (codigo,nombre,ruc_dni,telefono,whatsapp,email,tipo) VALUES (?,?,?,?,?,?,?)")
+           ->execute([$cCodigo,trim($_POST['cliente_nombre']),trim($_POST['cliente_dni']??''),trim($_POST['cliente_tel']??''),trim($_POST['cliente_wa']??''),trim($_POST['cliente_email']??''),$_POST['cliente_tipo']??'persona']);
+        $cliente_id = $db->lastInsertId();
+    }
+    if (!$cliente_id) $cliente_id = $ot['cliente_id'];
     // Actualizar OT
     $costoRep = (float)($_POST['costo_repuestos'] ?? 0);
     $costoMO  = (float)($_POST['costo_mano_obra']  ?? 0);
@@ -31,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $db->prepare("
         UPDATE ordenes_trabajo SET
+            cliente_id          = ?,
             tecnico_id          = ?,
             problema_reportado  = ?,
             diagnostico_inicial = ?,
@@ -45,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             garantia_dias       = ?
         WHERE id = ?
     ")->execute([
+        $cliente_id,
         $tecnico,
         trim($_POST['problema_reportado']  ?? ''),
         trim($_POST['diagnostico_inicial'] ?? ''),
@@ -57,8 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
 
     // Actualizar equipo
-    $db->prepare("UPDATE equipos SET marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
+    $db->prepare("UPDATE equipos SET tipo_equipo_id=?, marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
        ->execute([
+           (int)($_POST['tipo_equipo_id'] ?? $ot['tipo_equipo_id']),
            trim($_POST['equipo_marca']  ?? ''),
            trim($_POST['equipo_modelo'] ?? ''),
            trim($_POST['equipo_serial'] ?? ''),
@@ -98,6 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $tiposEquipo = $db->query("SELECT * FROM tipos_equipo WHERE activo=1 ORDER BY nombre")->fetchAll();
 $tecnicos    = $db->query("SELECT id, CONCAT(nombre,' ',apellido) AS nombre FROM usuarios WHERE rol='tecnico' AND activo=1")->fetchAll();
+$clientes    = $db->query("SELECT id,codigo,nombre,telefono FROM clientes WHERE activo=1 ORDER BY nombre")->fetchAll();
+$clientes    = $db->query("SELECT id,codigo,nombre,telefono FROM clientes WHERE activo=1 ORDER BY nombre")->fetchAll();
 $repuestos   = $db->prepare("SELECT * FROM ot_repuestos WHERE ot_id=? ORDER BY id"); $repuestos->execute([$id]); $repuestos=$repuestos->fetchAll();
 $fotos       = $db->prepare("SELECT * FROM fotos_ot WHERE ot_id=? ORDER BY id"); $fotos->execute([$id]); $fotos=$fotos->fetchAll();
 
@@ -134,12 +148,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="row g-2">
           <div class="col-md-4">
             <label class="tr-form-label">Tipo de equipo</label>
-            <select name="tipo_equipo_id" class="form-select" disabled>
+          <select name="tipo_equipo_id" class="form-select">
               <?php foreach($tiposEquipo as $t): ?>
-              <option value="<?= $t['id'] ?>" <?= $ot['equipo_id'] ? '' : '' ?>><?= sanitize($t['nombre']) ?></option>
+              <option value="<?= $t['id'] ?>" <?= $t['id'] == $ot['tipo_equipo_id'] ? 'selected' : '' ?>><?= sanitize($t['nombre']) ?></option>
               <?php endforeach; ?>
             </select>
-            <div class="small text-muted mt-1">Para cambiar el tipo, crea una nueva OT</div>
           </div>
           <div class="col-md-4">
             <label class="tr-form-label">Marca</label>
@@ -247,6 +260,55 @@ require_once __DIR__ . '/../../includes/header.php';
   <!-- Columna derecha -->
   <div class="col-lg-4">
 
+    <!-- Cliente -->
+    <div class="tr-card mb-3">
+      <div class="tr-card-header">
+        <h6 class="mb-0 small fw-semibold">CLIENTE</h6>
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" id="toggle-nuevo-cliente-edit" onchange="toggleNuevoClienteEdit(this.checked)">
+          <label class="form-check-label small" for="toggle-nuevo-cliente-edit">Cliente nuevo</label>
+        </div>
+      </div>
+      <div class="tr-card-body">
+        <div id="bloque-cliente-existente-edit">
+          <label class="tr-form-label">Buscar cliente *</label>
+          <input type="text" id="input-buscar-cliente" class="form-control form-control-sm mb-1" placeholder="Escribe nombre, código o teléfono..." autocomplete="off"/>
+          <div id="lista-clientes" style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;display:none;background:#fff;position:absolute;z-index:999;width:calc(100% - 2rem)"></div>
+          <select name="cliente_id" id="sel-cliente" class="form-select form-select-sm" required style="display:none">
+            <?php foreach($clientes as $c): ?>
+            <option value="<?= $c['id'] ?>" <?= $c['id'] == $ot['cliente_id'] ? 'selected' : '' ?>>
+              <?= sanitize($c['codigo'].' — '.$c['nombre']) ?> <?= $c['telefono']?'('.$c['telefono'].')':'' ?>
+            </option>
+            <?php endforeach; ?>
+          </select>
+          <div id="cliente-seleccionado" class="small text-success mt-1"></div>
+        </div>
+        <div id="bloque-cliente-nuevo-edit" style="display:none">
+          <div class="row g-2">
+            <div class="col-md-4"><label class="tr-form-label">Tipo</label><select name="cliente_tipo" id="edit-cliente-tipo" class="form-select form-select-sm"><option value="persona">Persona</option><option value="empresa">Empresa</option></select></div>
+            <div class="col-md-8">
+              <label class="tr-form-label">DNI / RUC</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="cliente_dni" id="edit-cliente-dni" class="form-control form-control-sm" maxlength="11" inputmode="numeric" placeholder="8 o 11 dígitos"/>
+                <span class="input-group-text" id="edit-dni-spinner" style="display:none"><span class="spinner-border spinner-border-sm"></span></span>
+              </div>
+              <div id="edit-dni-msg" class="small mt-1"></div>
+            </div>
+            <div class="col-12"><label class="tr-form-label">Nombre *</label><input type="text" name="cliente_nombre" id="edit-cliente-nombre" class="form-control form-control-sm"/></div>
+            <div class="col-md-6"><label class="tr-form-label">Teléfono</label><input type="text" name="cliente_tel" class="form-control form-control-sm"/></div>
+            <div class="col-md-6"><label class="tr-form-label">WhatsApp</label><input type="text" name="cliente_wa" class="form-control form-control-sm" placeholder="51999..."/></div>
+            <div class="col-12"><label class="tr-form-label">Correo</label><input type="email" name="cliente_email" class="form-control form-control-sm"/></div>
+          </div>
+        </div>
+        <div class="small mt-2 mb-1"><strong>Código OT:</strong> <?= sanitize($ot['codigo_ot']) ?></div>
+        <div class="small mb-1"><strong>Estado actual:</strong> <?= estadoOTBadge($ot['estado']) ?></div>
+        <div class="small mb-1"><strong>Ingreso:</strong> <?= formatDate($ot['fecha_ingreso']) ?></div>
+        <div class="alert alert-info py-1 mt-2 small mb-0">
+          Para cambiar el <strong>estado</strong> usa el botón en el detalle de la OT.
+        </div>
+      </div>
+    </div>
+
     <!-- Asignación -->
     <div class="tr-card mb-3">
       <div class="tr-card-header"><h6 class="mb-0 small fw-semibold"><i data-feather="settings" class="me-2" style="width:15px;height:15px"></i>ASIGNACIÓN</h6></div>
@@ -295,21 +357,6 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
     </div>
 
-    <!-- Info no editable -->
-    <div class="tr-card">
-      <div class="tr-card-header"><h6 class="mb-0 small fw-semibold">INFO</h6></div>
-      <div class="tr-card-body">
-        <div class="small mb-1"><strong>Cliente:</strong> <?= sanitize($ot['cliente_nombre']) ?></div>
-        <div class="small mb-1"><strong>Código OT:</strong> <?= sanitize($ot['codigo_ot']) ?></div>
-        <div class="small mb-1"><strong>Código cliente:</strong> <code><?= sanitize($ot['codigo_publico']) ?></code></div>
-        <div class="small mb-1"><strong>Estado actual:</strong> <?= estadoOTBadge($ot['estado']) ?></div>
-        <div class="small mb-1"><strong>Ingreso:</strong> <?= formatDate($ot['fecha_ingreso']) ?></div>
-        <div class="alert alert-info py-1 mt-2 small mb-0">
-          Para cambiar el <strong>estado</strong> usa el botón en el detalle de la OT.
-        </div>
-      </div>
-    </div>
-
     <button type="submit" class="btn btn-primary w-100 btn-lg mt-3">
       <i data-feather="save" style="width:16px;height:16px"></i> Guardar cambios
     </button>
@@ -324,7 +371,87 @@ $pageScripts = <<<'JS'
 <script>
 initFotoDrop('foto-drop','preview-fotos','input-fotos');
 
-// Agregar fila de repuesto
+// Buscador de cliente
+(function() {
+  const input    = document.getElementById('input-buscar-cliente');
+  const lista    = document.getElementById('lista-clientes');
+  const select   = document.getElementById('sel-cliente');
+  const info     = document.getElementById('cliente-seleccionado');
+  const opciones = Array.from(select.options);
+
+  const selActual = select.options[select.selectedIndex];
+  if (selActual) { input.value = selActual.text; info.textContent = '✓ ' + selActual.text; }
+
+  input.addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    lista.innerHTML = '';
+    if (!q) { lista.style.display = 'none'; return; }
+    const filtrados = opciones.filter(o => o.text.toLowerCase().includes(q)).slice(0, 20);
+    if (!filtrados.length) { lista.style.display = 'none'; return; }
+    filtrados.forEach(o => {
+      const div = document.createElement('div');
+      div.textContent = o.text;
+      div.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6';
+      div.addEventListener('mouseenter', () => div.style.background = '#f3f4f6');
+      div.addEventListener('mouseleave', () => div.style.background = '');
+      div.addEventListener('click', () => {
+        select.value = o.value;
+        input.value  = o.text;
+        info.textContent = '✓ ' + o.text;
+        lista.style.display = 'none';
+      });
+      lista.appendChild(div);
+    });
+    lista.style.display = '';
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !lista.contains(e.target)) lista.style.display = 'none';
+  });
+})();
+
+function toggleNuevoClienteEdit(nuevo) {
+  document.getElementById('bloque-cliente-existente-edit').style.display = nuevo ? 'none' : '';
+  document.getElementById('bloque-cliente-nuevo-edit').style.display     = nuevo ? ''     : 'none';
+  const sel = document.getElementById('sel-cliente');
+  sel.required = !nuevo;
+  if (nuevo) sel.value = '';
+}
+
+// API DNI/RUC cliente nuevo en editar
+(function() {
+  const inputDoc    = document.getElementById('edit-cliente-dni');
+  const inputNombre = document.getElementById('edit-cliente-nombre');
+  const inputTipo   = document.getElementById('edit-cliente-tipo');
+  const spinner     = document.getElementById('edit-dni-spinner');
+  const msg         = document.getElementById('edit-dni-msg');
+  if (!inputDoc) return;
+  inputDoc.addEventListener('keypress', e => { if (!/\d/.test(e.key)) e.preventDefault(); });
+  inputDoc.addEventListener('input', () => { inputDoc.value = inputDoc.value.replace(/\D/g, ''); });
+  let timer = null;
+  inputDoc.addEventListener('input', function() {
+    clearTimeout(timer);
+    const doc = this.value.trim();
+    msg.textContent = '';
+    if (doc.length !== 8 && doc.length !== 11) return;
+    spinner.style.display = '';
+    timer = setTimeout(() => {
+      fetch(window.BASE_URL + 'modules/clientes/api_documento.php?doc=' + doc)
+        .then(r => r.json())
+        .then(data => {
+          spinner.style.display = 'none';
+          if (data.ok) {
+            inputNombre.value = data.nombre;
+            inputTipo.value   = data.tipo;
+            msg.innerHTML = '<span class="text-success">✓ Encontrado</span>';
+          } else {
+            msg.innerHTML = '<span class="text-danger">No encontrado</span>';
+          }
+        })
+        .catch(() => { spinner.style.display = 'none'; });
+    }, 400);
+  });
+})();
 function agregarRepuesto() {
   const tbody = document.getElementById('tbody-repuestos');
   const vacia = document.getElementById('fila-vacia-rep');

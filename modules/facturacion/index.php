@@ -71,7 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $serie = $tipo === 'factura' ? SUNAT_SERIE_FACTURA : SUNAT_SERIE_BOLETA;
-        $numero = SunatService::siguienteNumero($db, $serie);
+        $correlativo = SunatService::siguienteNumero($db, $tipo);
+        if (!$correlativo) {
+            setFlash('danger', "No hay serie activa para '$tipo'. Ve a Admin → Series y activa una.");
+            redirect(BASE_URL.'modules/facturacion/index.php');
+        }
+        $serie  = $correlativo['serie'];
+        $numero = $correlativo['numero'];
 
         $db->prepare("UPDATE ventas SET tipo_doc=?, serie_doc=?, num_doc=?, sunat_estado=NULL, sunat_xml=NULL, sunat_cdr=NULL, sunat_hash=NULL, sunat_qr=NULL, sunat_mensaje=NULL WHERE id=?")
            ->execute([$tipo, $serie, (string)$numero, $ventaId]);
@@ -113,8 +119,11 @@ if ($accion === 'ver' && $id) {
     if (!$venta) { setFlash('danger','Venta no encontrada.'); redirect(BASE_URL.'modules/facturacion/index.php'); }
 
     $detalle = $db->prepare("
-        SELECT vd.*, p.nombre AS prod_nombre, p.codigo AS prod_codigo
-        FROM venta_detalle vd JOIN productos p ON p.id=vd.producto_id
+        SELECT vd.*, 
+               COALESCE(p.nombre, 'Servicio de reparación') AS prod_nombre, 
+               COALESCE(p.codigo, CONCAT('SRV-', LPAD(vd.id, 3, '0'))) AS prod_codigo
+        FROM venta_detalle vd 
+        LEFT JOIN productos p ON p.id=vd.producto_id
         WHERE vd.venta_id=? ORDER BY vd.id");
     $detalle->execute([$id]);
     $detalle = $detalle->fetchAll();
@@ -138,6 +147,8 @@ if ($accion === 'ver' && $id) {
         <span class="text-muted small ms-2"><?= formatDateTime($venta['created_at']) ?></span>
       </div>
       <div class="d-flex gap-2">
+        <a href="<?= BASE_URL ?>modules/facturacion/pdf.php?token=<?= urlencode($venta['sunat_hash'] ?: $venta['codigo']) ?>&formato=a4" target="_blank" class="btn btn-outline-danger btn-sm"><i data-feather="file-text" style="width:14px;height:14px"></i> PDF A4</a>
+        <a href="<?= BASE_URL ?>modules/facturacion/pdf.php?token=<?= urlencode($venta['sunat_hash'] ?: $venta['codigo']) ?>&formato=ticket" target="_blank" class="btn btn-outline-secondary btn-sm"><i data-feather="printer" style="width:14px;height:14px"></i> Ticket</a>
         <a href="<?= BASE_URL ?>modules/ventas/detalle.php?id=<?= $id ?>" class="btn btn-outline-secondary btn-sm">Ver venta</a>
         <a href="<?= BASE_URL ?>modules/facturacion/index.php" class="btn btn-outline-secondary btn-sm">← Volver</a>
       </div>
@@ -272,6 +283,7 @@ require_once __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="fw-bold mb-0">Facturación electrónica SUNAT</h5>
+  <a href="<?= BASE_URL ?>modules/facturacion/series.php" class="btn btn-outline-secondary btn-sm">⚙️ Admin Series</a>
 </div>
 
 <div class="tr-card mb-3">

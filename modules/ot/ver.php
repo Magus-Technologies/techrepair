@@ -50,6 +50,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         setFlash('success','Presupuesto aprobado.');
         redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
     }
+    if ($_POST['action'] === 'registrar_adelanto') {
+        $monto_adelanto = (float)($_POST['monto_adelanto'] ?? 0);
+        if ($monto_adelanto > 0) {
+            $db->prepare("UPDATE ordenes_trabajo SET adelanto=?, metodo_adelanto=?, fecha_adelanto=NOW() WHERE id=?")
+               ->execute([$monto_adelanto, $_POST['metodo_adelanto'], $id]);
+            $cajaAbierta = $db->prepare("SELECT id FROM cajas WHERE fecha=CURDATE() AND estado='abierta' ORDER BY id DESC LIMIT 1");
+            $cajaAbierta->execute();
+            $caja = $cajaAbierta->fetchColumn();
+            if ($caja) {
+                $db->prepare("INSERT INTO movimientos_caja (caja_id,tipo,concepto,monto,referencia,usuario_id) VALUES (?,?,?,?,?,?)")
+                   ->execute([$caja,'ingreso','Adelanto reparación ' . $ot['codigo_ot'], $monto_adelanto, $ot['codigo_ot'], $user['id']]);
+            }
+            setFlash('success','Adelanto registrado correctamente.');
+        }
+        redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
+    }
     if ($_POST['action'] === 'registrar_pago') {
         $db->prepare("UPDATE ordenes_trabajo SET pagado=1, metodo_pago=?, fecha_pago=NOW() WHERE id=?")
            ->execute([$_POST['metodo_pago'], $id]);
@@ -62,6 +78,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                ->execute([$caja,'ingreso','Pago reparación ' . $ot['codigo_ot'], $ot['precio_final'], $ot['codigo_ot'], $user['id']]);
         }
         setFlash('success','Pago registrado correctamente.');
+
+        // Emitir comprobante electrónico automáticamente al registrar pago
+        try {
+            require_once __DIR__ . '/../../config/sunat.php';
+            require_once __DIR__ . '/../../includes/sunat/SunatService.php';
+
+            $tipo_doc = $_POST['tipo_comprobante'] ?? 'boleta';
+            if (in_array($tipo_doc, ['boleta','factura'], true)) {
+                // Obtener cliente para validar
+                $cli = $db->prepare("SELECT * FROM clientes WHERE id=?");
+                $cli->execute([$ot['cliente_id']]);
+                $cli = $cli->fetch();
+                $doc = trim($cli['ruc_dni'] ?? '');
+
+                // Validar factura requiere RUC
+                if ($tipo_doc === 'factura' && strlen($doc) !== 11) {
+                    setFlash('warning', 'Pago registrado. No se emitió factura: el cliente no tiene RUC válido.');
+                    redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
+                }
+
+                // Obtener correlativo
+                $correlativo = siguienteCorrelativo($db, $tipo_doc);
+                if (!$correlativo) {
+                    setFlash('warning', 'Pago registrado. No se emitió comprobante: no hay serie activa para ' . $tipo_doc . '.');
+                    redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
+                }
+
+                // Calcular subtotal e IGV desde precio_final
+                $total   = (float)$ot['precio_final'];
+                $subtotal = round($total / 1.18, 2);
+                $igv      = round($total - $subtotal, 2);
+
+                // Crear venta
+                $codigoVenta = generarCodigoVenta($db);
+                $db->prepare("INSERT INTO ventas (codigo,cliente_id,usuario_id,tipo_doc,serie_doc,num_doc,subtotal,igv,descuento,total,metodo_pago,monto_pagado,estado) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,?)")
+                   ->execute([$codigoVenta, $ot['cliente_id'], $user['id'], $tipo_doc, $correlativo['serie'], (string)$correlativo['numero'], $subtotal, $igv, $total, $_POST['metodo_pago'], $total, 'completada']);
+                $ventaId = $db->lastInsertId();
+
+                // Insertar ítems desde ot_repuestos
+                $repOT = $db->prepare("SELECT * FROM ot_repuestos WHERE ot_id=?");
+                $repOT->execute([$id]);
+                $repOT = $repOT->fetchAll();
+
+                if ($repOT) {
+                    foreach ($repOT as $r) {
+                        $db->prepare("INSERT INTO venta_detalle (venta_id,producto_id,cantidad,precio_unit,descuento,subtotal) VALUES (?,?,?,?,0,?)")
+                           ->execute([$ventaId, $r['producto_id'] ?: null, $r['cantidad'], $r['precio_unit'], $r['subtotal']]);
+                    }
+                } else {
+                    // Si no hay repuestos, insertar el servicio como ítem genérico
+                    $db->prepare("INSERT INTO venta_detalle (venta_id,producto_id,cantidad,precio_unit,descuento,subtotal) VALUES (?,NULL,1,?,0,?)")
+                       ->execute([$ventaId, $total, $total]);
+                }
+
+                // Generar XML
+                $svc = new SunatService($db);
+                $r   = $svc->generarXml($ventaId);
+                if ($r['ok']) {
+                    setFlash('success', 'Pago registrado y comprobante emitido correctamente.');
+                } else {
+                    setFlash('warning', 'Pago registrado. El comprobante quedó pendiente: ' . $r['mensaje']);
+                }
+            }
+        } catch (Throwable $e) {
+            setFlash('warning', 'Pago registrado. Error al emitir comprobante: ' . $e->getMessage());
+        }
+
         redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
     }
 }
@@ -204,20 +287,18 @@ $eInfo  = ESTADOS_OT[$estado];
       <div class="tr-card-header"><h6 class="mb-0 small fw-semibold">CHECKLIST FÍSICO</h6></div>
       <div class="tr-card-body">
         <?php
-        $labels = ['pantalla'=>'Pantalla','carcasa'=>'Carcasa','teclado'=>'Teclado','touchpad'=>'Touchpad',
-                   'puertos'=>'Puertos','bateria'=>'Batería','cargador'=>'Cargador',
-                   'accesorios'=>'Accesorios','datos_respaldados'=>'Datos respaldados'];
-        foreach ($labels as $k => $l):
-            $val = $checklist[$k] ?? 'no_aplica';
+        // Iterar sobre las claves reales guardadas en el JSON, excluyendo la observación
+        foreach ($checklist as $k => $val):
+            if ($k === '_observacion') continue;
             $badge = $val==='bueno'?'success':($val==='malo'?'danger':'secondary');
         ?>
         <div class="checklist-item">
-          <span class="small"><?= $l ?></span>
+          <span class="small"><?= sanitize($k) ?></span>
           <span class="badge bg-<?= $badge ?>"><?= ucfirst($val) ?></span>
         </div>
         <?php endforeach; ?>
-        <?php if (!empty($checklist['observacion'])): ?>
-        <div class="mt-2 p-2 bg-light rounded small"><?= sanitize($checklist['observacion']) ?></div>
+        <?php if (!empty($checklist['_observacion'])): ?>
+        <div class="mt-2 p-2 bg-light rounded small"><?= sanitize($checklist['_observacion']) ?></div>
         <?php endif; ?>
       </div>
     </div>
@@ -281,6 +362,10 @@ $eInfo  = ESTADOS_OT[$estado];
         <?php endif; ?>
         <hr class="my-2">
         <div class="d-flex justify-content-between fw-bold"><span>Total:</span><span><?= formatMoney($ot['precio_final']) ?></span></div>
+        <?php if (($ot['adelanto'] ?? 0) > 0): ?>
+        <div class="d-flex justify-content-between small mb-1 text-success mt-1"><span>Adelanto (<?= ucfirst($ot['metodo_adelanto']) ?>):</span><span>-<?= formatMoney($ot['adelanto']) ?></span></div>
+        <div class="d-flex justify-content-between small fw-semibold"><span>Saldo pendiente:</span><span><?= formatMoney(max(0, $ot['precio_final'] - $ot['adelanto'])) ?></span></div>
+        <?php endif; ?>
         <?php if ($ot['pagado']): ?>
         <div class="alert alert-success py-1 mt-2 small mb-0">✅ Pagado — <?= ucfirst($ot['metodo_pago']) ?></div>
         <?php else: ?>
@@ -302,6 +387,25 @@ $eInfo  = ESTADOS_OT[$estado];
         <div class="text-success small mt-1">✅ Presupuesto aprobado <?= $ot['aprobado_por'] ? '('.$ot['aprobado_por'].')' : '' ?></div>
         <?php endif; ?>
 
+        <!-- Registrar adelanto -->
+        <?php if (!$ot['pagado'] && ($ot['adelanto'] ?? 0) == 0): ?>
+        <form method="POST" class="mt-2">
+          <input type="hidden" name="action" value="registrar_adelanto"/>
+          <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text">S/</span>
+            <input type="number" name="monto_adelanto" class="form-control" step="0.01" min="0.01" placeholder="Monto adelanto" required/>
+          </div>
+          <select name="metodo_adelanto" class="form-select form-select-sm mb-2">
+            <option value="efectivo">Efectivo</option>
+            <option value="yape">Yape</option>
+            <option value="plin">Plin</option>
+            <option value="tarjeta">Tarjeta</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
+          <button type="submit" class="btn btn-sm btn-outline-primary w-100">💵 Registrar adelanto</button>
+        </form>
+        <?php endif; ?>
+
         <!-- Registrar pago -->
         <?php if (!$ot['pagado'] && $ot['presupuesto_aprobado']): ?>
         <form method="POST" class="mt-2">
@@ -312,6 +416,11 @@ $eInfo  = ESTADOS_OT[$estado];
             <option value="plin">Plin</option>
             <option value="tarjeta">Tarjeta</option>
             <option value="transferencia">Transferencia</option>
+          </select>
+          <select name="tipo_comprobante" class="form-select form-select-sm mb-2">
+            <option value="boleta">Boleta</option>
+            <option value="factura">Factura</option>
+            <option value="">Sin comprobante</option>
           </select>
           <button type="submit" class="btn btn-sm btn-primary w-100">💰 Registrar pago</button>
         </form>
@@ -328,8 +437,8 @@ $eInfo  = ESTADOS_OT[$estado];
           <input type="hidden" name="action" value="cambiar_estado"/>
           <div class="mb-2">
             <select name="nuevo_estado" class="form-select form-select-sm">
-              <?php foreach (ESTADOS_OT as $k => $v): if ($k === $estado) continue; ?>
-              <option value="<?= $k ?>"><?= $v['label'] ?></option>
+              <?php foreach (ESTADOS_OT as $k => $v): ?>
+              <option value="<?= $k ?>" <?= $k === $estado ? 'selected' : '' ?>><?= $v['label'] ?></option>
               <?php endforeach; ?>
             </select>
           </div>

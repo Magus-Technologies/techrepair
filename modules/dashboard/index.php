@@ -49,7 +49,7 @@ $stmt = $db->query("
   JOIN equipos e ON e.id = ot.equipo_id
   JOIN tipos_equipo te ON te.id = e.tipo_equipo_id
   LEFT JOIN usuarios u ON u.id = ot.tecnico_id
-  WHERE ot.estado NOT IN ('entregado','cancelado')
+  WHERE ot.estado NOT IN ('cancelado')
   ORDER BY ot.fecha_ingreso DESC
   LIMIT 60
 ");
@@ -58,12 +58,24 @@ $ots_raw = $stmt->fetchAll();
 // Agrupar por estado
 $kanban = [];
 foreach (ESTADOS_OT as $key => $info) {
-    if (in_array($key, ['entregado','cancelado'])) continue;
+    if (in_array($key, ['cancelado'])) continue;
     $kanban[$key] = ['info' => $info, 'items' => []];
 }
 foreach ($ots_raw as $ot) {
     $kanban[$ot['estado']]['items'][] = $ot;
 }
+
+// Últimas OTs entregadas
+$entregadas = $db->query("
+  SELECT ot.id, ot.codigo_ot, ot.fecha_entrega, ot.precio_final,
+         c.nombre as cliente, te.nombre as tipo_equipo
+  FROM ordenes_trabajo ot
+  JOIN clientes c ON c.id=ot.cliente_id
+  JOIN equipos e ON e.id=ot.equipo_id
+  JOIN tipos_equipo te ON te.id=e.tipo_equipo_id
+  WHERE ot.estado='entregado'
+  ORDER BY ot.fecha_entrega DESC LIMIT 8
+")->fetchAll();
 
 // Últimas 5 OTs creadas
 $recientes = $db->query("
@@ -209,6 +221,36 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
       <?php endforeach; ?>
     </div>
+  </div>
+</div>
+
+<!-- Últimas OTs entregadas -->
+<div class="tr-card mb-4">
+  <div class="tr-card-header">
+    <h6 class="mb-0 fw-semibold"><i data-feather="check-circle" class="me-2" style="width:17px;height:17px"></i>Últimas órdenes entregadas</h6>
+    <a href="<?= BASE_URL ?>modules/ot/index.php?estado=entregado" class="btn btn-sm btn-outline-secondary">Ver todas</a>
+  </div>
+  <div class="tr-card-body p-0">
+    <table class="tr-table">
+      <thead>
+        <tr><th>Código</th><th>Cliente</th><th>Equipo</th><th>F. Entrega</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        <?php if (empty($entregadas)): ?>
+        <tr><td colspan="5" class="text-center text-muted py-3">Sin órdenes entregadas</td></tr>
+        <?php else: ?>
+        <?php foreach ($entregadas as $r): ?>
+        <tr>
+          <td><a href="<?= BASE_URL ?>modules/ot/ver.php?id=<?= $r['id'] ?>" class="fw-semibold text-primary text-decoration-none"><?= sanitize($r['codigo_ot']) ?></a></td>
+          <td><?= sanitize($r['cliente']) ?></td>
+          <td class="text-muted small"><?= sanitize($r['tipo_equipo']) ?></td>
+          <td class="text-muted small"><?= $r['fecha_entrega'] ? formatDateTime($r['fecha_entrega']) : '—' ?></td>
+          <td class="fw-semibold"><?= $r['precio_final'] > 0 ? formatMoney($r['precio_final']) : '—' ?></td>
+        </tr>
+        <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
   </div>
 </div>
 
