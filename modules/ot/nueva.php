@@ -38,10 +38,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $costoMO  = (float)($_POST['costo_mano_obra']  ?? 0);
     $total    = $costoRep + $costoMO;
     $tecnico  = $_POST['tecnico_id'] ? (int)$_POST['tecnico_id'] : null;
+    $adelanto        = (float)($_POST['adelanto'] ?? 0);
+    $metodo_adelanto = $adelanto > 0 ? ($_POST['metodo_adelanto'] ?? 'efectivo') : null;
 
-    $db->prepare("INSERT INTO ordenes_trabajo (codigo_ot,codigo_publico,cliente_id,equipo_id,tecnico_id,usuario_creador_id,estado,problema_reportado,diagnostico_inicial,checklist,costo_repuestos,costo_mano_obra,costo_total,precio_final,fecha_estimada,firma_cliente,garantia_dias) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-       ->execute([$codigoOT,$codigoPublico,$cliente_id,$equipo_id,$tecnico,$user['id'],'ingresado',trim($_POST['problema_reportado']??''),trim($_POST['diagnostico_inicial']??''),json_encode($checklist,JSON_UNESCAPED_UNICODE),$costoRep,$costoMO,$total,$total,$_POST['fecha_estimada']?:null,$_POST['firma_cliente']?:null,(int)($_POST['garantia_dias']??30)]);
+    $db->prepare("INSERT INTO ordenes_trabajo (codigo_ot,codigo_publico,cliente_id,equipo_id,tecnico_id,usuario_creador_id,estado,problema_reportado,diagnostico_inicial,checklist,costo_repuestos,costo_mano_obra,costo_total,precio_final,adelanto,metodo_adelanto,fecha_adelanto,fecha_estimada,firma_cliente,garantia_dias) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+       ->execute([$codigoOT,$codigoPublico,$cliente_id,$equipo_id,$tecnico,$user['id'],'ingresado',trim($_POST['problema_reportado']??''),trim($_POST['diagnostico_inicial']??''),json_encode($checklist,JSON_UNESCAPED_UNICODE),$costoRep,$costoMO,$total,$total,$adelanto,$metodo_adelanto,$adelanto>0?date('Y-m-d H:i:s'):null,$_POST['fecha_estimada']?:null,$_POST['firma_cliente']?:null,(int)($_POST['garantia_dias']??30)]);
     $otId = $db->lastInsertId();
+
+    // Registrar adelanto en caja si aplica
+    if ($adelanto > 0) {
+        $cajaAbierta = $db->prepare("SELECT id FROM cajas WHERE fecha=CURDATE() AND estado='abierta' ORDER BY id DESC LIMIT 1");
+        $cajaAbierta->execute();
+        $caja = $cajaAbierta->fetchColumn();
+        if ($caja) {
+            $db->prepare("INSERT INTO movimientos_caja (caja_id,tipo,concepto,monto,referencia,usuario_id) VALUES (?,?,?,?,?,?)")
+               ->execute([$caja,'ingreso','Adelanto reparación '.$codigoOT, $adelanto, $codigoOT, $user['id']]);
+        }
+    }
 
     $db->prepare("INSERT INTO historial_ot (ot_id,usuario_id,estado_nuevo,comentario) VALUES (?,?,?,?)")
        ->execute([$otId,$user['id'],'ingresado','OT creada']);
@@ -258,6 +271,18 @@ require_once __DIR__ . '/../../includes/header.php';
           <span class="small text-muted">Total:</span>
           <span class="fw-bold fs-5 ms-2" id="total_display">S/ 0.00</span>
           <input type="hidden" name="precio_final" id="precio_final" value="0"/>
+        </div>
+        <hr class="my-2"/>
+        <div class="mb-2"><label class="tr-form-label">Adelanto (S/)</label><input type="number" name="adelanto" class="form-control form-control-sm currency-input" step="0.01" value="0" min="0"/></div>
+        <div class="mb-2">
+          <label class="tr-form-label">Método adelanto</label>
+          <select name="metodo_adelanto" class="form-select form-select-sm">
+            <option value="efectivo">Efectivo</option>
+            <option value="yape">Yape</option>
+            <option value="plin">Plin</option>
+            <option value="tarjeta">Tarjeta</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
         </div>
       </div>
     </div>

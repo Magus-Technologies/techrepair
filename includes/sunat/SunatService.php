@@ -128,13 +128,11 @@ class SunatService
     }
 
     /**
-     * Calcula el siguiente correlativo libre para una serie dada.
+     * Usa siguienteCorrelativo() atómico en lugar de MAX(num_doc).
      */
-    public static function siguienteNumero(PDO $db, string $serie): int
+    public static function siguienteNumero(PDO $db, string $tipo): ?array
     {
-        $st = $db->prepare("SELECT COALESCE(MAX(CAST(num_doc AS UNSIGNED)),0)+1 FROM ventas WHERE serie_doc=?");
-        $st->execute([$serie]);
-        return (int) $st->fetchColumn();
+        return siguienteCorrelativo($db, $tipo);
     }
 
     // ─── Persistencia ────────────────────────────────────────────────
@@ -206,9 +204,11 @@ class SunatService
     private function fetchItems(int $ventaId): array
     {
         $st = $this->db->prepare("
-            SELECT vd.*, p.nombre AS prod_nombre, p.codigo AS prod_codigo
+            SELECT vd.*, 
+                   COALESCE(p.nombre, 'Servicio de reparación') AS prod_nombre, 
+                   COALESCE(p.codigo, CONCAT('SRV-', LPAD(vd.id, 3, '0'))) AS prod_codigo
             FROM venta_detalle vd
-            JOIN productos p ON p.id = vd.producto_id
+            LEFT JOIN productos p ON p.id = vd.producto_id
             WHERE vd.venta_id=? ORDER BY vd.id
         ");
         $st->execute([$ventaId]);

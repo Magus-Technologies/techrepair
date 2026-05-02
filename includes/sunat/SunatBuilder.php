@@ -39,7 +39,7 @@ class SunatBuilder
             'razon_social'    => SUNAT_RAZON_SOCIAL,
             'nombreComercial' => SUNAT_NOMBRE_COMERCIAL,
             'direccion'       => SUNAT_DIRECCION,
-            'ubigueo'         => SUNAT_UBIGEO,
+            'ubigeo'          => SUNAT_UBIGEO,
             'distrito'        => SUNAT_DISTRITO,
             'provincia'       => SUNAT_PROVINCIA,
             'departamento'    => SUNAT_DEPARTAMENTO,
@@ -71,19 +71,26 @@ class SunatBuilder
     }
 
     /**
-     * `precio_unit` se asume CON IGV incluido (el servicio Greenter divide
-     * entre 1.18 internamente).
+     * Detecta si el ítem es servicio (unidad ZZ) o repuesto físico (unidad NIU).
+     * Si tiene producto_id → repuesto. Si no → servicio de reparación.
      */
     private static function detalles(array $items): array
     {
         $out = [];
+        $srvIdx = 1;
         foreach ($items as $i => $it) {
+            $esRepuesto = !empty($it['producto_id']) || !empty($it['inventario_id']);
+            $unidad     = $esRepuesto ? 'NIU' : 'ZZ';
+            $codProd    = $esRepuesto
+                ? (string)($it['prod_codigo'] ?? $it['producto_id'] ?? ($i + 1))
+                : 'SRV-' . str_pad((string)$srvIdx++, 3, '0', STR_PAD_LEFT);
+
             $out[] = [
-                'cod_producto' => (string) ($it['prod_codigo'] ?? $it['producto_id'] ?? ($i + 1)),
-                'unidad'       => 'NIU',
-                'descripcion'  => $it['prod_nombre'] ?? 'Producto',
-                'cantidad'     => (float) ($it['cantidad'] ?? 1),
-                'precio'       => (float) ($it['precio_unit'] ?? 0),
+                'cod_producto' => $codProd,
+                'unidad'       => $unidad,
+                'descripcion'  => $it['prod_nombre'] ?? $it['descripcion'] ?? 'Servicio',
+                'cantidad'     => (float)($it['cantidad'] ?? 1),
+                'precio'       => (float)($it['precio_unit'] ?? 0),
             ];
         }
         return $out;

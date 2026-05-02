@@ -10,7 +10,7 @@ if (strlen($doc) === 8) {
 } elseif (strlen($doc) === 11) {
     $url = "https://dniruc.apisperu.com/api/v1/ruc/{$doc}?token={$TOKEN}";
 } else {
-    echo json_encode(['error' => 'Documento invÃ¡lido']);
+    echo json_encode(['error' => 'Documento inválido']);
     exit;
 }
 
