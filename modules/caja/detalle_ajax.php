@@ -97,6 +97,7 @@ $ESTADOS_OT = [
     'listo'         => ['label'=>'Listo',          'color'=>'success'],
     'entregado'     => ['label'=>'Entregado',      'color'=>'primary'],
     'cancelado'     => ['label'=>'Cancelado',      'color'=>'danger'],
+    'devolucion'    => ['label'=>'Devolución',     'color'=>'dark'],
 ];
 ?>
 <style>

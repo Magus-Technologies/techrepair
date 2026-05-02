@@ -88,8 +88,8 @@ body.tr-body {
 .tr-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
 
 .tr-nav-group {
-  font-size: 10px; font-weight: 600; letter-spacing: .08em;
-  text-transform: uppercase; color: rgba(255,255,255,.32);
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: rgba(255,255,255,.55);
   padding: 14px 8px 4px;
   white-space: nowrap; overflow: hidden;
 }
@@ -97,8 +97,8 @@ body.tr-body {
 .tr-nav-item {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px; border-radius: 7px; margin-bottom: 2px;
-  color: var(--sidebar-text); text-decoration: none;
-  font-size: 13.5px;
+  color: #e5e7eb; text-decoration: none;
+  font-size: 14.5px;
   transition: background .15s, color .15s;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
@@ -109,7 +109,7 @@ body.tr-body {
 
 /* Bigger tap targets on mobile */
 @media (max-width: 991px) {
-  .tr-nav-item { padding: 11px 12px; font-size: 15px; }
+  .tr-nav-item { padding: 11px 12px; font-size: 16px; }
   .tr-nav-item svg { width: 20px; height: 20px; }
 }
 
