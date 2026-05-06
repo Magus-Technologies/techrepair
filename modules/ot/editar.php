@@ -15,7 +15,7 @@ $ot = $db->prepare("
     JOIN clientes c ON c.id = ot.cliente_id
     JOIN equipos e ON e.id = ot.equipo_id
     JOIN tipos_equipo te ON te.id = e.tipo_equipo_id
-    WHERE ot.id = ?");
+    WHERE ot.id = ? AND ot.deleted_at IS NULL");
 $ot->execute([$id]);
 $ot = $ot->fetch();
 if (!$ot) { setFlash('danger','OT no encontrada'); redirect(BASE_URL.'modules/ot/index.php'); }
@@ -68,16 +68,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
 
     // Actualizar equipo
-    $db->prepare("UPDATE equipos SET tipo_equipo_id=?, marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
-       ->execute([
-           (int)($_POST['tipo_equipo_id'] ?? $ot['tipo_equipo_id']),
-           trim($_POST['equipo_marca']  ?? ''),
-           trim($_POST['equipo_modelo'] ?? ''),
-           trim($_POST['equipo_serial'] ?? ''),
-           trim($_POST['equipo_color']  ?? ''),
-           trim($_POST['equipo_desc']   ?? ''),
-           $ot['equipo_id'],
-       ]);
+    // IMPORTANTE: Si se cambió el cliente, crear un NUEVO equipo para evitar corrupción de datos
+    $cliente_cambio = ($cliente_id != $ot['cliente_id']);
+    
+    if ($cliente_cambio) {
+        // Cliente cambió: crear nuevo equipo para este cliente
+        $db->prepare("INSERT INTO equipos (tipo_equipo_id, cliente_id, marca, modelo, serial, color, descripcion) VALUES (?,?,?,?,?,?,?)")
+           ->execute([
+               (int)($_POST['tipo_equipo_id'] ?? $ot['tipo_equipo_id']),
+               $cliente_id,
+               trim($_POST['equipo_marca']  ?? ''),
+               trim($_POST['equipo_modelo'] ?? ''),
+               trim($_POST['equipo_serial'] ?? ''),
+               trim($_POST['equipo_color']  ?? ''),
+               trim($_POST['equipo_desc']   ?? ''),
+           ]);
+        $nuevo_equipo_id = $db->lastInsertId();
+        
+        // Actualizar la OT con el nuevo equipo
+        $db->prepare("UPDATE ordenes_trabajo SET equipo_id = ? WHERE id = ?")->execute([$nuevo_equipo_id, $id]);
+    } else {
+        // Cliente NO cambió: actualizar el equipo existente
+        $db->prepare("UPDATE equipos SET tipo_equipo_id=?, marca=?, modelo=?, serial=?, color=?, descripcion=? WHERE id=?")
+           ->execute([
+               (int)($_POST['tipo_equipo_id'] ?? $ot['tipo_equipo_id']),
+               trim($_POST['equipo_marca']  ?? ''),
+               trim($_POST['equipo_modelo'] ?? ''),
+               trim($_POST['equipo_serial'] ?? ''),
+               trim($_POST['equipo_color']  ?? ''),
+               trim($_POST['equipo_desc']   ?? ''),
+               $ot['equipo_id'],
+           ]);
+    }
 
     // Subir nuevas fotos
     if (!empty($_FILES['fotos']['name'][0])) {

@@ -37,6 +37,7 @@ $ots = $db->prepare("
   JOIN tipos_equipo te ON te.id = e.tipo_equipo_id
   LEFT JOIN usuarios u ON u.id = ot.tecnico_id
   $whereSQL
+  " . ($whereSQL ? 'AND' : 'WHERE') . " ot.deleted_at IS NULL
   ORDER BY ot.created_at DESC
   LIMIT 200
 ");
@@ -157,6 +158,10 @@ require_once __DIR__ . '/../../includes/header.php';
                  class="btn btn-outline-danger" title="PDF" target="_blank" data-bs-toggle="tooltip">
                 <i data-feather="file-text" style="width:13px;height:13px"></i>
               </a>
+              <button type="button" class="btn btn-outline-danger" title="Eliminar" data-bs-toggle="tooltip"
+                      onclick="confirmarEliminar(<?= $ot['id'] ?>, '<?= sanitize($ot['codigo_ot']) ?>')">
+                <i data-feather="trash-2" style="width:13px;height:13px"></i>
+              </button>
             </div>
           </td>
         </tr>
@@ -166,5 +171,38 @@ require_once __DIR__ . '/../../includes/header.php';
     </table>
   </div>
 </div>
+
+<!-- Modal de confirmación para eliminar -->
+<div class="modal fade" id="modalEliminarOT" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Confirmar eliminación</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">¿Estás seguro de que deseas eliminar esta orden de trabajo?</p>
+        <p class="fw-bold mb-0" id="otEliminarCodigo"></p>
+        <p class="text-muted small mt-2 mb-0">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form method="POST" action="<?= BASE_URL ?>modules/ot/eliminar.php" id="formEliminarOT" style="display:inline">
+          <input type="hidden" name="id" id="otEliminarId">
+          <button type="submit" class="btn btn-danger">Eliminar OT</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmarEliminar(id, codigo) {
+  document.getElementById('otEliminarId').value = id;
+  document.getElementById('otEliminarCodigo').textContent = codigo;
+  const modal = new bootstrap.Modal(document.getElementById('modalEliminarOT'));
+  modal.show();
+}
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
