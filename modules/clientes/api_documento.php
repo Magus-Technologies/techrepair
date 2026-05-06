@@ -66,21 +66,21 @@ if (strlen($doc) === 8) {
         $tipo   = 'empresa';
     }
 
-    // Datos adicionales para módulo de empresa
-    $response = [
-        'ok' => true,
-        'nombre' => $nombre,
-        'tipo' => $tipo,
-        'data' => [
-            'razon_social' => $razon,
-            'direccion' => trim($data['direccion'] ?? ''),
-            'distrito' => trim($data['distrito'] ?? ''),
-            'provincia' => trim($data['provincia'] ?? ''),
-            'departamento' => trim($data['departamento'] ?? ''),
-            'estado' => trim($data['estado'] ?? ''),
-            'condicion' => trim($data['condicion'] ?? ''),
-        ]
-    ];
+// Datos adicionales para módulo de empresa
+$response = [
+    'ok' => true,
+    'nombre' => $nombre,
+    'tipo' => $tipo,
+    'data' => [
+        'razon_social' => $razon,
+        'direccion' => trim($data['direccion'] ?? ''),
+        'distrito' => trim($data['distrito'] ?? ''),
+        'provincia' => trim($data['provincia'] ?? ''),
+        'departamento' => trim($data['departamento'] ?? ''),
+        'estado' => trim($data['estado'] ?? ''),
+        'condicion' => trim($data['condicion'] ?? ''),
+    ]
+];
 
-    echo json_encode($response);
+echo json_encode($response);
 }
