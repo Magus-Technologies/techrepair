@@ -5,6 +5,9 @@ requireLogin();
 
 $db = getDB();
 
+// Cargar estados desde BD
+$estadosOT = getEstadosOT($db, false);
+
 // Limpiar texto para uso seguro en atributos HTML y JS
 function waLimpiar(string $s): string {
     // Eliminar caracteres de control excepto saltos de línea
@@ -232,7 +235,7 @@ require_once __DIR__ . '/../../includes/header.php';
              style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;
                     border-radius:8px;padding:8px">
           <?php foreach($clientes as $cl):
-            $estadoColor = ESTADOS_OT[$cl['ultimo_estado']??'']['color']??'secondary';
+            $estadoColor = $estadosOT[$cl['ultimo_estado']??'']['color']??'secondary';
           ?>
           <div class="form-check cliente-row py-1"
                data-seg="<?= htmlspecialchars($cl['segmento']) ?>"

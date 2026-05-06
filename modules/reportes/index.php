@@ -5,6 +5,9 @@ requireLogin();
 requireRole([ROL_ADMIN]);
 $db = getDB();
 
+// Cargar estados desde BD
+$estadosOT = getEstadosOT($db, false);
+
 $desde = $_GET['desde'] ?? date('Y-m-01');
 $hasta = $_GET['hasta'] ?? date('Y-m-d');
 
@@ -150,7 +153,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <?php
 $labDias   = json_encode(array_map(fn($r)=>date('d/m',strtotime($r['dia'])), $ventasDia));
 $dataDias  = json_encode(array_map(fn($r)=>(float)$r['total'], $ventasDia));
-$labEst    = json_encode(array_map(fn($r)=>ESTADOS_OT[$r['estado']]['label']??$r['estado'], $otEstado));
+$labEst    = json_encode(array_map(fn($r)=>$estadosOT[$r['estado']]['label']??$r['estado'], $otEstado));
 $dataEst   = json_encode(array_map(fn($r)=>(int)$r['n'], $otEstado));
 $colEst    = json_encode(['#6c757d','#0dcaf0','#ffc107','#198754','#0d6efd','#dc3545']);
 

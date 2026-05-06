@@ -6,6 +6,9 @@ requireLogin();
 $db  = getDB();
 $hoy = date('Y-m-d');
 
+// Inicializar cache de estados
+estadoOTBadge('', $db);
+
 // KPIs
 $kpi = [];
 

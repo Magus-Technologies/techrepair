@@ -156,6 +156,9 @@
     <a href="<?= BASE_URL ?>modules/configuracion/empresa.php" class="tr-nav-item">
       <i data-feather="briefcase"></i><span>Empresa</span>
     </a>
+    <a href="<?= BASE_URL ?>modules/configuracion/estados.php" class="tr-nav-item">
+      <i data-feather="list"></i><span>Estados de Orden</span>
+    </a>
     </div>
     <?php endif; ?>
   </nav>

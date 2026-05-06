@@ -6,6 +6,9 @@ if (!isLoggedIn()) { echo '<p class="text-danger p-3">No autorizado</p>'; exit; 
 $db  = getDB();
 $id  = (int)($_GET['id'] ?? 0);
 
+// Cargar estados desde BD
+$estadosOT = getEstadosOT($db, false);
+
 $caja = $db->prepare("
     SELECT ca.*, CONCAT(u.nombre,' ',u.apellido) AS usuario_nombre
     FROM cajas ca JOIN usuarios u ON u.id = ca.usuario_id
@@ -89,16 +92,6 @@ function dkAjax($tipo, $v) { return $tipo==='bil' ? 'bil_'.(int)$v : 'mon_'.str_
 
 $densAp = json_decode($caja['denominaciones_apertura'] ?? '{}', true) ?: [];
 $densCi = json_decode($caja['denominaciones_cierre']   ?? '{}', true) ?: [];
-
-$ESTADOS_OT = [
-    'ingresado'     => ['label'=>'Ingresado',     'color'=>'secondary'],
-    'en_revision'   => ['label'=>'En revisión',   'color'=>'info'],
-    'en_reparacion' => ['label'=>'En reparación', 'color'=>'warning'],
-    'listo'         => ['label'=>'Listo',          'color'=>'success'],
-    'entregado'     => ['label'=>'Entregado',      'color'=>'primary'],
-    'cancelado'     => ['label'=>'Cancelado',      'color'=>'danger'],
-    'devolucion'    => ['label'=>'Devolución',     'color'=>'dark'],
-];
 ?>
 <style>
 .det-panel { display:none; }
@@ -223,7 +216,7 @@ $ESTADOS_OT = [
                     <div class="text-muted" style="font-size:11px">
                       <?= sanitize(trim($oDet['tipo_equipo'].' '.($oDet['marca']??'').' '.($oDet['modelo']??''))) ?>
                     </div>
-                    <?php $eOT = $ESTADOS_OT[$oDet['estado']] ?? ['label'=>$oDet['estado'],'color'=>'secondary']; ?>
+                    <?php $eOT = $estadosOT[$oDet['estado']] ?? ['label'=>$oDet['estado'],'color'=>'secondary']; ?>
                     <span class="badge bg-<?= $eOT['color'] ?>" style="font-size:10px"><?= $eOT['label'] ?></span>
                   </div>
                   <button class="btn btn-sm btn-outline-success ms-2 flex-shrink-0"
@@ -468,7 +461,7 @@ $ESTADOS_OT = [
 <?php endforeach; ?>
 
 <?php foreach($otsDetalle as $ref => $ot): if(!$ot) continue;
-  $eOT = $ESTADOS_OT[$ot['estado']] ?? ['label'=>$ot['estado'],'color'=>'secondary'];
+  $eOT = $estadosOT[$ot['estado']] ?? ['label'=>$ot['estado'],'color'=>'secondary'];
 ?>
 <div id="panel-ot-<?= sanitize($ref) ?>" class="det-panel">
   <button class="btn btn-outline-secondary btn-back mb-3" data-panel="panel-main" onclick="window.mostrarPanel && window.mostrarPanel(this.dataset.panel)">
