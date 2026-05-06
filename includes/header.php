@@ -53,7 +53,7 @@
     <div id="nav-reparaciones" class="tr-nav-collapse <?= $repActive?'open':'' ?>">
     <a href="<?= BASE_URL ?>modules/ot/index.php"
        class="tr-nav-item <?= $repActive?'active':'' ?>">
-      <i data-feather="clipboard"></i><span>”rdenes de trabajo</span>
+      <i data-feather="clipboard"></i><span>√ìrdenes de trabajo</span>
     </a>
     <a href="<?= BASE_URL ?>modules/ot/nueva.php" class="tr-nav-item">
       <i data-feather="plus-circle"></i><span>Nueva OT</span>
@@ -75,7 +75,7 @@
     </a>
     <a href="<?= BASE_URL ?>modules/facturacion/index.php"
        class="tr-nav-item <?= strpos($_SERVER['REQUEST_URI'],'facturacion')!==false?'active':'' ?>">
-      <i data-feather="file-text"></i><span>FacturaciÛn</span>
+      <i data-feather="file-text"></i><span>Facturaci√≥n</span>
     </a>
     </div>
     <?php endif; ?>
@@ -83,15 +83,15 @@
     <?php if(in_array($rol,[ROL_ADMIN,ROL_TECNICO])): ?>
     <?php $catActive = strpos($_SERVER['REQUEST_URI'],'catalogo')!==false; ?>
     <div class="tr-nav-group tr-nav-collapse-toggle" data-target="nav-catalogo" style="cursor:pointer">
-      Cat·logo p˙blico <i data-feather="chevron-down" style="width:12px;height:12px;float:right;margin-top:2px;transition:.2s" id="icon-catalogo"></i>
+      Cat√°logo p√∫blico <i data-feather="chevron-down" style="width:12px;height:12px;float:right;margin-top:2px;transition:.2s" id="icon-catalogo"></i>
     </div>
     <div id="nav-catalogo" class="tr-nav-collapse <?= $catActive?'open':'' ?>">
     <a href="<?= BASE_URL ?>modules/catalogo/index.php"
        class="tr-nav-item <?= $catActive?'active':'' ?>">
-      <i data-feather="shopping-bag"></i><span>Cat·logo</span>
+      <i data-feather="shopping-bag"></i><span>Cat√°logo</span>
     </a>
     <a href="<?= BASE_URL ?>public/catalogo/" target="_blank" class="tr-nav-item">
-      <i data-feather="external-link"></i><span>Ver cat·logo</span>
+      <i data-feather="external-link"></i><span>Ver cat√°logo</span>
     </a>
     </div>
 
@@ -135,7 +135,7 @@
     <?php if($rol === ROL_ADMIN): ?>
     <?php $adminActive = strpos($_SERVER['REQUEST_URI'],'caja')!==false || strpos($_SERVER['REQUEST_URI'],'reportes')!==false || strpos($_SERVER['REQUEST_URI'],'tecnicos')!==false || strpos($_SERVER['REQUEST_URI'],'garantias')!==false || strpos($_SERVER['REQUEST_URI'],'configuracion')!==false; ?>
     <div class="tr-nav-group tr-nav-collapse-toggle" data-target="nav-admin" style="cursor:pointer">
-      AdministraciÛn <i data-feather="chevron-down" style="width:12px;height:12px;float:right;margin-top:2px;transition:.2s" id="icon-admin"></i>
+      Administraci√≥n <i data-feather="chevron-down" style="width:12px;height:12px;float:right;margin-top:2px;transition:.2s" id="icon-admin"></i>
     </div>
     <div id="nav-admin" class="tr-nav-collapse <?= $adminActive?'open':'' ?>">
     <a href="<?= BASE_URL ?>modules/caja/index.php" class="tr-nav-item">
@@ -145,13 +145,13 @@
       <i data-feather="trending-up"></i><span>Reportes</span>
     </a>
     <a href="<?= BASE_URL ?>modules/tecnicos/index.php" class="tr-nav-item">
-      <i data-feather="user-check"></i><span>TÈcnicos</span>
+      <i data-feather="user-check"></i><span>T√©cnicos</span>
     </a>
     <a href="<?= BASE_URL ?>modules/garantias/index.php" class="tr-nav-item">
-      <i data-feather="shield"></i><span>GarantÌas</span>
+      <i data-feather="shield"></i><span>Garant√≠as</span>
     </a>
     <a href="<?= BASE_URL ?>modules/configuracion/index.php" class="tr-nav-item">
-      <i data-feather="settings"></i><span>ConfiguraciÛn</span>
+      <i data-feather="settings"></i><span>Configuraci√≥n</span>
     </a>
     <a href="<?= BASE_URL ?>modules/configuracion/empresa.php" class="tr-nav-item">
       <i data-feather="briefcase"></i><span>Empresa</span>
@@ -167,7 +167,7 @@
         <div class="fw-semibold text-truncate"><?= sanitize($u['nombre']) ?></div>
         <div class="text-muted" style="font-size:11px"><?= ucfirst($u['rol']) ?></div>
       </div>
-      <a href="<?= BASE_URL ?>modules/auth/logout.php" title="Cerrar sesiÛn">
+      <a href="<?= BASE_URL ?>modules/auth/logout.php" title="Cerrar sesi√≥n">
         <i data-feather="log-out" style="color:#fff"></i>
       </a>
     </div>
@@ -181,7 +181,7 @@ document.querySelectorAll('.tr-nav-collapse-toggle').forEach(function(toggle) {
   var target   = document.getElementById(targetId);
   var icon     = document.getElementById('icon-' + targetId.replace('nav-',''));
   if (!target) return;
-  // Si ya est· abierto, rotar icono
+  // Si ya est√° abierto, rotar icono
   if (target.classList.contains('open') && icon) icon.style.transform = 'rotate(180deg)';
   toggle.addEventListener('click', function() {
     target.classList.toggle('open');
