@@ -25,22 +25,67 @@ $ot = $ot->fetch();
 
 if (!$ot) { setFlash('danger','OT no encontrada'); redirect(BASE_URL . 'modules/ot/index.php'); }
 
+// Cargar estados desde BD
+$estadosOT = getEstadosOT($db, true);
+
+// Si el estado actual de la OT no está en la lista (ej: estado inactivo o recién creado), agregarlo
+if (!isset($estadosOT[$ot['estado']])) {
+    $estadoActual = $db->prepare("SELECT codigo, nombre as label, color, icono as icon FROM estados_orden WHERE codigo=?");
+    $estadoActual->execute([$ot['estado']]);
+    $estadoData = $estadoActual->fetch();
+    if ($estadoData) {
+        $estadosOT[$estadoData['codigo']] = [
+            'label' => $estadoData['label'],
+            'color' => $estadoData['color'],
+            'icon' => $estadoData['icon']
+        ];
+    }
+}
+
+// Inicializar cache de estadoOTBadge con todos los estados
+estadoOTBadge('', $db);
+
 // Cambio de estado
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'cambiar_estado') {
         $nuevo  = $_POST['nuevo_estado'] ?? '';
         $coment = trim($_POST['comentario'] ?? '');
-        $allowed = array_keys(ESTADOS_OT);
-        if (in_array($nuevo, $allowed)) {
-            $extra = '';
-            $params = [$nuevo];
-            if ($nuevo === 'entregado') {
-                $extra = ', fecha_entrega = NOW()';
+        
+        if (empty($nuevo)) {
+            setFlash('danger', 'Debe seleccionar un estado');
+            redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
+        }
+        
+        // Validar que el estado existe en la BD
+        $estadoValido = $db->prepare("SELECT COUNT(*) FROM estados_orden WHERE codigo = ? AND activo = 1");
+        $estadoValido->execute([$nuevo]);
+        
+        if ($estadoValido->fetchColumn() > 0) {
+            // Ejecutar UPDATE
+            try {
+                $stmt = $db->prepare("UPDATE ordenes_trabajo SET estado = ? WHERE id = ?");
+                $stmt->execute([$nuevo, $id]);
+                
+                // Si es entregado, actualizar fecha
+                if ($nuevo === 'entregado') {
+                    $db->prepare("UPDATE ordenes_trabajo SET fecha_entrega = NOW() WHERE id = ?")->execute([$id]);
+                }
+                
+                $db->prepare("INSERT INTO historial_ot (ot_id,usuario_id,estado_antes,estado_nuevo,comentario) VALUES (?,?,?,?,?)")
+                   ->execute([$id, $user['id'], $ot['estado'], $nuevo, $coment]);
+                
+                // Obtener nombre del estado para el mensaje
+                $nombreEstado = $db->prepare("SELECT nombre FROM estados_orden WHERE codigo = ?");
+                $nombreEstado->execute([$nuevo]);
+                $nombreEstado = $nombreEstado->fetchColumn();
+                
+                setFlash('success', 'Estado actualizado a: ' . $nombreEstado);
+            } catch (PDOException $e) {
+                setFlash('danger', 'Error al actualizar estado');
             }
-            $db->prepare("UPDATE ordenes_trabajo SET estado = ? $extra WHERE id = ?")->execute([$nuevo, $id]);
-            $db->prepare("INSERT INTO historial_ot (ot_id,usuario_id,estado_antes,estado_nuevo,comentario) VALUES (?,?,?,?,?)")
-               ->execute([$id, $user['id'], $ot['estado'], $nuevo, $coment]);
-            setFlash('success', 'Estado actualizado a: ' . ESTADOS_OT[$nuevo]['label']);
+            redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
+        } else {
+            setFlash('danger', 'Estado no válido');
             redirect(BASE_URL . 'modules/ot/ver.php?id=' . $id);
         }
     }
@@ -183,7 +228,6 @@ $breadcrumb = [
 require_once __DIR__ . '/../../includes/header.php';
 
 $estado = $ot['estado'];
-$eInfo  = ESTADOS_OT[$estado];
 ?>
 
 <!-- Header OT -->
@@ -191,7 +235,7 @@ $eInfo  = ESTADOS_OT[$estado];
   <div>
     <h4 class="fw-bold mb-0"><?= sanitize($ot['codigo_ot']) ?></h4>
     <div class="d-flex align-items-center gap-2 mt-1">
-      <?= estadoOTBadge($estado) ?>
+      <?= estadoOTBadge($estado, $db) ?>
       <span class="text-muted small">Creada <?= formatDateTime($ot['created_at']) ?></span>
       <span class="badge bg-light text-dark border small" title="Código para el cliente">
         🔑 <?= sanitize($ot['codigo_publico']) ?>
@@ -206,7 +250,7 @@ $eInfo  = ESTADOS_OT[$estado];
       <i data-feather="file-text" style="width:14px;height:14px"></i> PDF / Imprimir
     </a>
     <?php if ($ot['whatsapp']): ?>
-    <a href="https://wa.me/<?= preg_replace('/\D/','',$ot['whatsapp']) ?>?text=Hola+<?= urlencode($ot['cliente_nombre']) ?>%2C+su+equipo+est%C3%A1+<?= urlencode(ESTADOS_OT[$estado]['label']) ?>+%28OT:+<?= $ot['codigo_ot'] ?>%29"
+    <a href="https://wa.me/<?= preg_replace('/\D/','',$ot['whatsapp']) ?>?text=Hola+<?= urlencode($ot['cliente_nombre']) ?>%2C+su+equipo+est%C3%A1+<?= urlencode($estadosOT[$estado]['label'] ?? $estado) ?>+%28OT:+<?= $ot['codigo_ot'] ?>%29"
        target="_blank" class="btn btn-success btn-sm">
       <i data-feather="message-circle" style="width:14px;height:14px"></i> WhatsApp
     </a>
@@ -334,7 +378,7 @@ $eInfo  = ESTADOS_OT[$estado];
           <?php foreach ($historial as $h): ?>
           <div class="ot-timeline-item">
             <div class="fw-semibold small">
-              <?= isset(ESTADOS_OT[$h['estado_nuevo']]) ? ESTADOS_OT[$h['estado_nuevo']]['label'] : sanitize($h['estado_nuevo']) ?>
+              <?= isset($estadosOT[$h['estado_nuevo']]) ? $estadosOT[$h['estado_nuevo']]['label'] : sanitize($h['estado_nuevo']) ?>
             </div>
             <div class="text-muted" style="font-size:12px"><?= sanitize($h['usuario_nombre']) ?> — <?= formatDateTime($h['created_at']) ?></div>
             <?php if ($h['comentario']): ?>
@@ -436,11 +480,26 @@ $eInfo  = ESTADOS_OT[$estado];
         <form method="POST">
           <input type="hidden" name="action" value="cambiar_estado"/>
           <div class="mb-2">
-            <select name="nuevo_estado" class="form-select form-select-sm">
-              <?php foreach (ESTADOS_OT as $k => $v): ?>
-              <option value="<?= $k ?>" <?= $k === $estado ? 'selected' : '' ?>><?= $v['label'] ?></option>
-              <?php endforeach; ?>
-            </select>
+            <label class="tr-form-label small">Nuevo estado</label>
+            <div class="input-group input-group-sm">
+              <select name="nuevo_estado" id="sel-nuevo-estado" class="form-select form-select-sm">
+                <?php foreach ($estadosOT as $k => $v): ?>
+                <option value="<?= $k ?>" <?= $k === $estado ? 'selected' : '' ?>><?= $v['label'] ?></option>
+                <?php endforeach; ?>
+              </select>
+              <button type="button" class="btn btn-outline-success btn-sm" title="Agregar nuevo estado"
+                      onclick="agregarEstado()">
+                <i data-feather="plus" style="width:14px;height:14px"></i>
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm" title="Editar estado seleccionado"
+                      onclick="editarEstadoSeleccionado()">
+                <i data-feather="edit-2" style="width:14px;height:14px"></i>
+              </button>
+              <button type="button" class="btn btn-outline-danger btn-sm" title="Eliminar estado seleccionado"
+                      onclick="eliminarEstadoSeleccionado()">
+                <i data-feather="trash-2" style="width:14px;height:14px"></i>
+              </button>
+            </div>
           </div>
           <div class="mb-2">
             <textarea name="comentario" class="form-control form-control-sm" rows="2" placeholder="Comentario opcional..."></textarea>
@@ -484,5 +543,333 @@ $eInfo  = ESTADOS_OT[$estado];
 
   </div>
 </div>
+
+<!-- Modal para agregar nuevo estado -->
+<div class="modal fade" id="modal-agregar-estado" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">➕ Nuevo estado de orden</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="tr-form-label small">Nombre del estado *</label>
+          <input type="text" id="input-nuevo-estado" class="form-control form-control-sm" placeholder="Ej: Esperando repuesto, En garantía..." required/>
+          <div class="text-muted small mt-1">El código se generará automáticamente</div>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="tr-form-label small">Color del badge</label>
+            <select id="input-color-estado" class="form-select form-select-sm">
+              <option value="secondary" selected>⚪ Gris</option>
+              <option value="primary">🔵 Azul</option>
+              <option value="success">🟢 Verde</option>
+              <option value="danger">🔴 Rojo</option>
+              <option value="warning">🟡 Amarillo</option>
+              <option value="info">🔵 Celeste</option>
+              <option value="dark">⚫ Negro</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="tr-form-label small">Ícono</label>
+            <select id="input-icono-estado" class="form-select form-select-sm">
+              <option value="circle">⚪ Círculo</option>
+              <option value="clock">🕐 Reloj</option>
+              <option value="package">📦 Paquete</option>
+              <option value="tool">🔧 Herramienta</option>
+              <option value="truck">🚚 Camión</option>
+              <option value="alert-circle">⚠️ Alerta</option>
+              <option value="check-circle">✅ Check</option>
+              <option value="x-circle">❌ X</option>
+              <option value="pause-circle">⏸️ Pausa</option>
+              <option value="play-circle">▶️ Play</option>
+              <option value="inbox">📥 Inbox</option>
+              <option value="search">🔍 Buscar</option>
+              <option value="settings">⚙️ Config</option>
+              <option value="star">⭐ Estrella</option>
+              <option value="flag">🚩 Bandera</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="tr-form-label small">Vista previa</label>
+          <div class="p-2 bg-light rounded text-center">
+            <span class="badge" id="preview-badge" style="font-size:13px">
+              <i data-feather="circle" id="preview-icon" style="width:12px;height:12px"></i>
+              <span id="preview-text">Nombre del estado</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="text-danger small" id="error-agregar-estado" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success btn-sm" id="btn-confirmar-estado">
+          <i data-feather="plus" style="width:13px;height:13px"></i> Crear estado
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para editar estado -->
+<div class="modal fade" id="modal-editar-estado" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">✏️ Editar estado</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-estado-codigo"/>
+        
+        <div class="mb-3">
+          <label class="tr-form-label small">Nombre del estado *</label>
+          <input type="text" id="edit-estado-nombre" class="form-control form-control-sm" required/>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="tr-form-label small">Color del badge</label>
+            <select id="edit-estado-color" class="form-select form-select-sm">
+              <option value="secondary">⚪ Gris</option>
+              <option value="primary">🔵 Azul</option>
+              <option value="success">🟢 Verde</option>
+              <option value="danger">🔴 Rojo</option>
+              <option value="warning">🟡 Amarillo</option>
+              <option value="info">🔵 Celeste</option>
+              <option value="dark">⚫ Negro</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="tr-form-label small">Ícono</label>
+            <select id="edit-estado-icono" class="form-select form-select-sm">
+              <option value="circle">⚪ Círculo</option>
+              <option value="clock">🕐 Reloj</option>
+              <option value="package">📦 Paquete</option>
+              <option value="tool">🔧 Herramienta</option>
+              <option value="truck">🚚 Camión</option>
+              <option value="alert-circle">⚠️ Alerta</option>
+              <option value="check-circle">✅ Check</option>
+              <option value="x-circle">❌ X</option>
+              <option value="pause-circle">⏸️ Pausa</option>
+              <option value="play-circle">▶️ Play</option>
+              <option value="inbox">📥 Inbox</option>
+              <option value="search">🔍 Buscar</option>
+              <option value="settings">⚙️ Config</option>
+              <option value="star">⭐ Estrella</option>
+              <option value="flag">🚩 Bandera</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="text-danger small" id="error-editar-estado" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-guardar-edicion">
+          <i data-feather="save" style="width:13px;height:13px"></i> Guardar cambios
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para eliminar estado -->
+<div class="modal fade" id="modal-eliminar-estado" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white py-2">
+        <h6 class="modal-title">⚠️ Eliminar estado</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">¿Eliminar el estado <strong id="delete-estado-nombre"></strong>?</p>
+        <p class="text-muted small mb-0">Esta acción no se puede deshacer.</p>
+        <input type="hidden" id="delete-estado-codigo"/>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger btn-sm" id="btn-confirmar-eliminar">
+          <i data-feather="trash-2" style="width:13px;height:13px"></i> Eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Estados disponibles (cargados desde PHP)
+const estadosDisponibles = <?= json_encode($estadosOT) ?>;
+
+function agregarEstado() {
+  const inp = document.getElementById('input-nuevo-estado');
+  inp.value = '';
+  document.getElementById('input-color-estado').value = 'secondary';
+  document.getElementById('input-icono-estado').value = 'circle';
+  document.getElementById('error-agregar-estado').style.display = 'none';
+  actualizarPreview();
+  const modal = new bootstrap.Modal(document.getElementById('modal-agregar-estado'));
+  modal.show();
+  setTimeout(() => inp.focus(), 400);
+}
+
+function actualizarPreview() {
+  const nombre = document.getElementById('input-nuevo-estado').value.trim() || 'Nombre del estado';
+  const color = document.getElementById('input-color-estado').value;
+  const icono = document.getElementById('input-icono-estado').value;
+  
+  const badge = document.getElementById('preview-badge');
+  badge.className = 'badge bg-' + color;
+  badge.style.fontSize = '13px';
+  
+  document.getElementById('preview-text').textContent = nombre;
+  document.getElementById('preview-icon').setAttribute('data-feather', icono);
+  
+  feather.replace();
+}
+
+// Actualizar preview en tiempo real
+document.getElementById('input-nuevo-estado').addEventListener('input', actualizarPreview);
+document.getElementById('input-color-estado').addEventListener('change', actualizarPreview);
+document.getElementById('input-icono-estado').addEventListener('change', actualizarPreview);
+
+document.getElementById('btn-confirmar-estado').addEventListener('click', async function() {
+  const valor = document.getElementById('input-nuevo-estado').value.trim();
+  const color = document.getElementById('input-color-estado').value;
+  const icono = document.getElementById('input-icono-estado').value;
+  
+  if (!valor) {
+    document.getElementById('error-agregar-estado').textContent = 'El nombre es obligatorio';
+    document.getElementById('error-agregar-estado').style.display = '';
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('accion', 'estado_orden');
+  fd.append('valor',  valor);
+  fd.append('color',  color);
+  fd.append('icono',  icono);
+
+  try {
+    const r = await fetch('<?= BASE_URL ?>modules/ot/api_agregar.php', { method:'POST', body: fd });
+    const d = await r.json();
+
+    if (d.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modal-agregar-estado')).hide();
+      window.location.reload();
+    } else {
+      document.getElementById('error-agregar-estado').textContent = d.error || 'Error al crear estado';
+      document.getElementById('error-agregar-estado').style.display = '';
+    }
+  } catch(e) {
+    document.getElementById('error-agregar-estado').textContent = 'Error de conexión';
+    document.getElementById('error-agregar-estado').style.display = '';
+  }
+});
+
+// Editar estado
+function editarEstadoSeleccionado() {
+  const select = document.getElementById('sel-nuevo-estado');
+  const codigo = select.value;
+  const estado = estadosDisponibles[codigo];
+  
+  if (!estado) return;
+  
+  document.getElementById('edit-estado-codigo').value = codigo;
+  document.getElementById('edit-estado-nombre').value = estado.label;
+  document.getElementById('edit-estado-color').value = estado.color;
+  document.getElementById('edit-estado-icono').value = estado.icon;
+  document.getElementById('error-editar-estado').style.display = 'none';
+  
+  const modal = new bootstrap.Modal(document.getElementById('modal-editar-estado'));
+  modal.show();
+}
+
+document.getElementById('btn-guardar-edicion').addEventListener('click', async function() {
+  const codigo = document.getElementById('edit-estado-codigo').value;
+  const nombre = document.getElementById('edit-estado-nombre').value.trim();
+  const color = document.getElementById('edit-estado-color').value;
+  const icono = document.getElementById('edit-estado-icono').value;
+  
+  if (!nombre) {
+    document.getElementById('error-editar-estado').textContent = 'El nombre es obligatorio';
+    document.getElementById('error-editar-estado').style.display = '';
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('accion', 'editar_estado');
+  fd.append('codigo', codigo);
+  fd.append('nombre', nombre);
+  fd.append('color',  color);
+  fd.append('icono',  icono);
+
+  try {
+    const r = await fetch('<?= BASE_URL ?>modules/ot/api_agregar.php', { method:'POST', body: fd });
+    const d = await r.json();
+
+    if (d.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modal-editar-estado')).hide();
+      window.location.reload();
+    } else {
+      document.getElementById('error-editar-estado').textContent = d.error || 'Error al editar';
+      document.getElementById('error-editar-estado').style.display = '';
+    }
+  } catch(e) {
+    document.getElementById('error-editar-estado').textContent = 'Error de conexión';
+    document.getElementById('error-editar-estado').style.display = '';
+  }
+});
+
+// Eliminar estado
+function eliminarEstadoSeleccionado() {
+  const select = document.getElementById('sel-nuevo-estado');
+  const codigo = select.value;
+  const estado = estadosDisponibles[codigo];
+  
+  if (!estado) return;
+  
+  document.getElementById('delete-estado-codigo').value = codigo;
+  document.getElementById('delete-estado-nombre').textContent = estado.label;
+  
+  const modal = new bootstrap.Modal(document.getElementById('modal-eliminar-estado'));
+  modal.show();
+}
+
+document.getElementById('btn-confirmar-eliminar').addEventListener('click', async function() {
+  const codigo = document.getElementById('delete-estado-codigo').value;
+
+  const fd = new FormData();
+  fd.append('accion', 'eliminar_estado');
+  fd.append('codigo', codigo);
+
+  try {
+    const r = await fetch('<?= BASE_URL ?>modules/ot/api_agregar.php', { method:'POST', body: fd });
+    const d = await r.json();
+
+    if (d.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modal-eliminar-estado')).hide();
+      window.location.reload();
+    } else {
+      alert(d.error || 'Error al eliminar estado');
+    }
+  } catch(e) {
+    alert('Error de conexión');
+  }
+});
+
+// Confirmar con Enter
+document.getElementById('input-nuevo-estado').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { 
+    e.preventDefault(); 
+    document.getElementById('btn-confirmar-estado').click(); 
+  }
+});
+</script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

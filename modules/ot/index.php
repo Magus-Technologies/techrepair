@@ -47,6 +47,12 @@ $lista = $ots->fetchAll();
 // Para el filtro de técnicos
 $tecnicos = $db->query("SELECT id,CONCAT(nombre,' ',apellido) as nombre FROM usuarios WHERE rol='tecnico' AND activo=1")->fetchAll();
 
+// Cargar estados desde BD
+$estadosOT = getEstadosOT($db, true);
+
+// Inicializar cache de estadoOTBadge
+estadoOTBadge('', $db);
+
 $pageTitle  = 'Órdenes de trabajo — ' . APP_NAME;
 $breadcrumb = [['label'=>'Órdenes de trabajo','url'=>null]];
 require_once __DIR__ . '/../../includes/header.php';
@@ -70,7 +76,7 @@ require_once __DIR__ . '/../../includes/header.php';
       <div class="col-md-2">
         <select name="estado" class="form-select form-select-sm">
           <option value="">Todos los estados</option>
-          <?php foreach (ESTADOS_OT as $k => $v): ?>
+          <?php foreach ($estadosOT as $k => $v): ?>
           <option value="<?= $k ?>" <?= $f_estado===$k?'selected':'' ?>><?= $v['label'] ?></option>
           <?php endforeach; ?>
         </select>

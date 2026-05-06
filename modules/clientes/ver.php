@@ -5,6 +5,9 @@ requireLogin();
 $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 
+// Inicializar cache de estados
+estadoOTBadge('', $db);
+
 $cliente = $db->prepare("SELECT * FROM clientes WHERE id=? AND activo=1");
 $cliente->execute([$id]);
 $cliente = $cliente->fetch();
