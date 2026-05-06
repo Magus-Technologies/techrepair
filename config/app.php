@@ -13,7 +13,8 @@ define('ROL_ADMIN',    'admin');
 define('ROL_TECNICO',  'tecnico');
 define('ROL_VENDEDOR', 'vendedor');
 
-// Estados de OT
+// Estados de OT (DEPRECADO - ahora se cargan desde BD con getEstadosOT())
+// Mantenido por compatibilidad con código legacy
 define('ESTADOS_OT', [
     'ingresado'     => ['label' => 'Ingresado',      'color' => 'secondary', 'icon' => 'inbox'],
     'en_revision'   => ['label' => 'En revisión',    'color' => 'info',      'icon' => 'search'],
@@ -23,6 +24,22 @@ define('ESTADOS_OT', [
     'cancelado'     => ['label' => 'Cancelado',       'color' => 'danger',    'icon' => 'x-circle'],
     'devolucion'    => ['label' => 'Devolución',      'color' => 'dark',      'icon' => 'corner-down-left'],
 ]);
+
+/**
+ * Obtiene los estados de orden desde la base de datos
+ * @param PDO $db Conexión a la base de datos
+ * @param bool $soloActivos Si es true, solo devuelve estados activos
+ * @return array Array asociativo [codigo => [label, color, icon]]
+ */
+function getEstadosOT(PDO $db, bool $soloActivos = true): array {
+    $where = $soloActivos ? 'WHERE activo=1' : '';
+    $st = $db->query("SELECT codigo, nombre as label, color, icono as icon FROM estados_orden $where ORDER BY orden");
+    $estados = [];
+    foreach ($st->fetchAll() as $e) {
+        $estados[$e['codigo']] = ['label' => $e['label'], 'color' => $e['color'], 'icon' => $e['icon']];
+    }
+    return $estados ?: ESTADOS_OT; // Fallback a constante si tabla vacía
+}
 
 // ----------------------------------------------------------
 // Autenticación
@@ -119,8 +136,21 @@ function formatDateTime(string $dt): string {
     return date('d/m/Y H:i', strtotime($dt));
 }
 
-function estadoOTBadge(string $estado): string {
-    $e = ESTADOS_OT[$estado] ?? ['label' => $estado, 'color' => 'secondary', 'icon' => 'circle'];
+function estadoOTBadge(string $estado, ?PDO $db = null): string {
+    static $cache = null;
+    if ($cache === null && $db !== null) {
+        $cache = getEstadosOT($db, false); // Cargar todos los estados (activos e inactivos)
+    }
+    // Usar cache si existe, sino fallback a constante
+    $estados = $cache ?? ESTADOS_OT;
+    
+    // Si el estado no está en cache pero tenemos DB, intentar recargarlo
+    if (!isset($estados[$estado]) && $db !== null) {
+        $cache = getEstadosOT($db, false);
+        $estados = $cache;
+    }
+    
+    $e = $estados[$estado] ?? ['label' => $estado, 'color' => 'secondary', 'icon' => 'circle'];
     return '<span class="badge bg-' . $e['color'] . '">' . $e['label'] . '</span>';
 }
 

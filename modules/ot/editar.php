@@ -7,6 +7,9 @@ $db   = getDB();
 $user = currentUser();
 $id   = (int)($_GET['id'] ?? 0);
 
+// Inicializar cache de estados
+estadoOTBadge('', $db);
+
 // Cargar OT
 $ot = $db->prepare("
     SELECT ot.*, c.nombre AS cliente_nombre, c.ruc_dni, c.telefono, c.whatsapp, c.email AS cliente_email,
