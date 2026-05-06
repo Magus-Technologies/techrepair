@@ -6,25 +6,60 @@
 <script>
 feather.replace();
 
-// Sidebar toggle
-document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
-  document.getElementById('sidebar').classList.toggle('collapsed');
-  document.getElementById('main-content').classList.toggle('expanded');
-});
+// Sidebar toggle para móvil
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebar-overlay');
+
+if (sidebarToggle && sidebar) {
+  sidebarToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('mobile-open');
+    if (overlay) overlay.classList.toggle('show');
+  });
+}
+
+if (overlay) {
+  overlay.addEventListener('click', () => {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('show');
+  });
+}
 
 // Notificaciones de stock bajo
 fetch('<?= BASE_URL ?>modules/inventario/api_stock_alerts.php')
   .then(r => r.json()).then(data => {
     if (data.count > 0) {
       const badge = document.getElementById('badge-notif');
-      badge.textContent = data.count;
-      badge.style.display = 'inline';
+      if (badge) {
+        badge.textContent = data.count;
+        badge.style.display = 'inline';
+      }
     }
   }).catch(() => {});
 </script>
-<?php if (isset($pageScripts)): ?>
-<?= $pageScripts ?>
-<?php endif; ?>
+<?php 
+echo "<!-- DEBUG: Buscando pageScripts -->\n";
+if (isset($pageScripts)) {
+  echo "<!-- DEBUG: pageScripts encontrado en variable local -->\n";
+  echo $pageScripts;
+} elseif (isset($GLOBALS['pageScripts'])) {
+  echo "<!-- DEBUG: pageScripts encontrado en GLOBALS -->\n";
+  echo $GLOBALS['pageScripts'];
+} else {
+  echo "<!-- DEBUG: pageScripts NO ENCONTRADO -->\n";
+}
+
+// Incluir scripts adicionales si existen
+if (!empty($additionalScripts)) {
+  echo $additionalScripts;
+}
+
+// Incluir archivo de scripts si existe
+if (!empty($scriptsFile) && file_exists($scriptsFile)) {
+  echo "<!-- DEBUG: Incluyendo scriptsFile: $scriptsFile -->\n";
+  require $scriptsFile;
+}
+?>
 
 <!-- ── Mobile bottom navigation ── -->
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav" style="display:none">

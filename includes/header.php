@@ -153,6 +153,9 @@
     <a href="<?= BASE_URL ?>modules/configuracion/index.php" class="tr-nav-item">
       <i data-feather="settings"></i><span>Configuración</span>
     </a>
+    <a href="<?= BASE_URL ?>modules/configuracion/empresa.php" class="tr-nav-item">
+      <i data-feather="briefcase"></i><span>Empresa</span>
+    </a>
     </div>
     <?php endif; ?>
   </nav>
