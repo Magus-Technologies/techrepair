@@ -33,30 +33,8 @@
 <!-- SIDEBAR -->
 <div class="tr-sidebar" id="sidebar">
   <div class="tr-sidebar-brand">
-    <?php
-    $_empLogo = null;
-    $_empNombre = APP_NAME;
-    try {
-        $_empDb = isset($db) ? $db : getDB();
-        $_empRow = $_empDb->query("SELECT logo, nombre_comercial, razon_social FROM empresa WHERE id=1")->fetch();
-        if ($_empRow) {
-            if (!empty($_empRow['logo']))
-                $_empLogo = BASE_URL . 'assets/img/uploads/' . $_empRow['logo'];
-            if (!empty($_empRow['nombre_comercial']))
-                $_empNombre = $_empRow['nombre_comercial'];
-            elseif (!empty($_empRow['razon_social']))
-                $_empNombre = $_empRow['razon_social'];
-        }
-    } catch(Exception $e) {}
-    ?>
-    <?php if ($_empLogo): ?>
-      <img src="<?= htmlspecialchars($_empLogo) ?>" alt="Logo"
-           style="height:32px;max-width:140px;object-fit:contain;"
-           onerror="this.style.display='none'">
-    <?php else: ?>
-      <i data-feather="tool" class="me-2"></i>
-      <span><?= htmlspecialchars($_empNombre) ?></span>
-    <?php endif; ?>
+    <i data-feather="tool" class="me-2"></i>
+    <span><?= APP_NAME ?></span>
   </div>
 
   <nav class="tr-nav">

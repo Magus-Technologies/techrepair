@@ -15,28 +15,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'crear
     redirect(BASE_URL.'modules/tecnicos/index.php');
 }
 
-// Editar usuario
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'editar') {
-    $uid = (int)$_POST['uid'];
-    $fields = [
-        'nombre'   => trim($_POST['nombre']),
-        'apellido' => trim($_POST['apellido']),
-        'email'    => trim($_POST['email']),
-        'telefono' => trim($_POST['telefono'] ?? ''),
-        'rol'      => $_POST['rol'],
-    ];
-    // Actualizar contraseña solo si se proporcionó
-    if (!empty(trim($_POST['password'] ?? ''))) {
-        $fields['password_hash'] = password_hash(trim($_POST['password']), PASSWORD_BCRYPT);
-    }
-    $sets = implode(',', array_map(fn($k) => "$k=?", array_keys($fields)));
-    $vals = array_values($fields);
-    $vals[] = $uid;
-    $db->prepare("UPDATE usuarios SET $sets WHERE id=?")->execute($vals);
-    setFlash('success', 'Usuario actualizado correctamente.');
-    redirect(BASE_URL.'modules/tecnicos/index.php');
-}
-
 // Cambiar estado
 if (isset($_GET['toggle'])) {
     $uid = (int)$_GET['toggle'];
@@ -85,18 +63,12 @@ require_once __DIR__ . '/../../includes/header.php';
           <td class="small text-muted"><?= $u['ultimo_acceso']?formatDateTime($u['ultimo_acceso']):'Nunca' ?></td>
           <td><span class="badge bg-<?= $u['activo']?'success':'secondary' ?>"><?= $u['activo']?'Activo':'Inactivo' ?></span></td>
           <td>
-            <div class="d-flex gap-1">
-              <button class="btn btn-sm btn-outline-primary" title="Editar usuario"
-                onclick="abrirEditar(<?= htmlspecialchars(json_encode($u), ENT_QUOTES) ?>)">
-                <i data-feather="edit-2" style="width:13px;height:13px"></i>
-              </button>
-              <?php if($u['id'] != $user['id']): ?>
-              <a href="?toggle=<?= $u['id'] ?>" class="btn btn-sm btn-outline-<?= $u['activo']?'danger':'success' ?>" 
-                 data-confirm="¿<?= $u['activo']?'Desactivar':'Activar' ?> este usuario?">
-                <?= $u['activo']?'Desactivar':'Activar' ?>
-              </a>
-              <?php endif; ?>
-            </div>
+            <?php if($u['id'] != $user['id']): ?>
+            <a href="?toggle=<?= $u['id'] ?>" class="btn btn-sm btn-outline-<?= $u['activo']?'danger':'success' ?>" 
+               data-confirm="¿<?= $u['activo']?'Desactivar':'Activar' ?> este usuario?">
+              <?= $u['activo']?'Desactivar':'Activar' ?>
+            </a>
+            <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>
@@ -140,51 +112,4 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
   </div>
 </div>
-<!-- Modal editar usuario -->
-<div class="modal fade" id="modal-editar" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST">
-        <input type="hidden" name="action" value="editar"/>
-        <input type="hidden" name="uid" id="edit-uid"/>
-        <div class="modal-header">
-          <h6 class="modal-title fw-bold">Editar usuario</h6>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="row g-2">
-            <div class="col-md-6"><label class="tr-form-label">Nombre *</label><input type="text" name="nombre" id="edit-nombre" class="form-control" required/></div>
-            <div class="col-md-6"><label class="tr-form-label">Apellido *</label><input type="text" name="apellido" id="edit-apellido" class="form-control" required/></div>
-            <div class="col-md-6"><label class="tr-form-label">Email *</label><input type="email" name="email" id="edit-email" class="form-control" required/></div>
-            <div class="col-md-6"><label class="tr-form-label">Teléfono</label><input type="text" name="telefono" id="edit-telefono" class="form-control"/></div>
-            <div class="col-md-6">
-              <label class="tr-form-label">Rol *</label>
-              <select name="rol" id="edit-rol" class="form-select">
-                <option value="tecnico">Técnico</option>
-                <option value="vendedor">Vendedor</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-            <div class="col-md-6"><label class="tr-form-label">Nueva contraseña <small class="text-muted">(dejar vacío para no cambiar)</small></label><input type="password" name="password" class="form-control" minlength="6"/></div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<script>
-function abrirEditar(u) {
-  document.getElementById('edit-uid').value     = u.id;
-  document.getElementById('edit-nombre').value  = u.nombre;
-  document.getElementById('edit-apellido').value = u.apellido;
-  document.getElementById('edit-email').value   = u.email;
-  document.getElementById('edit-telefono').value = u.telefono || '';
-  document.getElementById('edit-rol').value     = u.rol;
-  new bootstrap.Modal(document.getElementById('modal-editar')).show();
-}
-</script>
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

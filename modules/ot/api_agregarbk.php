@@ -16,51 +16,6 @@ if (!$valor && !in_array($accion, ['editar_estado', 'eliminar_estado'])) {
 }
 
 switch ($accion) {
-    case 'editar_tipo_equipo':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id || !$valor) { echo json_encode(['error'=>'Datos inválidos']); break; }
-        $db->prepare("UPDATE tipos_equipo SET nombre=? WHERE id=?")->execute([$valor, $id]);
-        echo json_encode(['ok'=>true,'nombre'=>$valor]);
-        break;
-
-    case 'eliminar_tipo_equipo':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id) { echo json_encode(['error'=>'ID inválido']); break; }
-        $uso = $db->prepare("SELECT COUNT(*) FROM equipos WHERE tipo_equipo_id=?");
-        $uso->execute([$id]);
-        if ($uso->fetchColumn() > 0) { echo json_encode(['error'=>'No se puede eliminar: hay equipos con este tipo']); break; }
-        $db->prepare("DELETE FROM tipos_equipo WHERE id=?")->execute([$id]);
-        echo json_encode(['ok'=>true]);
-        break;
-
-    case 'editar_marca':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id || !$valor) { echo json_encode(['error'=>'Datos inválidos']); break; }
-        $db->prepare("UPDATE marcas_equipo SET nombre=? WHERE id=?")->execute([$valor, $id]);
-        echo json_encode(['ok'=>true,'nombre'=>$valor]);
-        break;
-
-    case 'eliminar_marca':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id) { echo json_encode(['error'=>'ID inválido']); break; }
-        $db->prepare("DELETE FROM marcas_equipo WHERE id=?")->execute([$id]);
-        echo json_encode(['ok'=>true]);
-        break;
-
-    case 'editar_checklist_item':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id || !$valor) { echo json_encode(['error'=>'Datos inválidos']); break; }
-        $db->prepare("UPDATE checklist_items SET nombre=? WHERE id=?")->execute([$valor, $id]);
-        echo json_encode(['ok'=>true,'nombre'=>$valor]);
-        break;
-
-    case 'eliminar_checklist_item':
-        $id = (int)($_POST['id'] ?? 0);
-        if (!$id) { echo json_encode(['error'=>'ID inválido']); break; }
-        $db->prepare("UPDATE checklist_items SET activo=0 WHERE id=?")->execute([$id]);
-        echo json_encode(['ok'=>true]);
-        break;
-
     case 'tipo_equipo':
         $existe = $db->prepare("SELECT id FROM tipos_equipo WHERE nombre=?");
         $existe->execute([$valor]);

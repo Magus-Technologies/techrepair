@@ -147,17 +147,9 @@ require_once __DIR__ . '/../../includes/header.php';
               <select name="tipo_equipo_id" id="sel-tipo-equipo" class="form-select" required>
                 <option value="">— Tipo —</option>
                 <?php foreach($tiposEquipo as $t): ?>
-                <option value="<?= $t['id'] ?>" data-id="<?= $t['id'] ?>"><?= sanitize($t['nombre']) ?></option>
+                <option value="<?= $t['id'] ?>"><?= sanitize($t['nombre']) ?></option>
                 <?php endforeach; ?>
               </select>
-              <button type="button" class="btn btn-outline-warning" title="Editar tipo seleccionado"
-                      onclick="editarOpcionSeleccionada('tipo_equipo','sel-tipo-equipo')">
-                <i data-feather="edit-2" style="width:14px;height:14px"></i>
-              </button>
-              <button type="button" class="btn btn-outline-danger" title="Eliminar tipo seleccionado"
-                      onclick="eliminarOpcionSeleccionada('tipo_equipo','sel-tipo-equipo')">
-                <i data-feather="trash-2" style="width:14px;height:14px"></i>
-              </button>
               <button type="button" class="btn btn-outline-success" title="Agregar nuevo tipo"
                       onclick="agregarOpcion('tipo_equipo','sel-tipo-equipo','Nuevo tipo de equipo (ej: Smartwatch, Proyector...)')">
                 <i data-feather="plus" style="width:14px;height:14px"></i>
@@ -172,17 +164,9 @@ require_once __DIR__ . '/../../includes/header.php';
               <select name="equipo_marca" id="sel-marca" class="form-select">
                 <option value="">— Marca —</option>
                 <?php foreach($marcas as $m): ?>
-                <option value="<?= sanitize($m['nombre']) ?>" data-id="<?= $m['id'] ?>"><?= sanitize($m['nombre']) ?></option>
+                <option value="<?= sanitize($m['nombre']) ?>"><?= sanitize($m['nombre']) ?></option>
                 <?php endforeach; ?>
               </select>
-              <button type="button" class="btn btn-outline-warning" title="Editar marca seleccionada"
-                      onclick="editarOpcionSeleccionada('marca','sel-marca')">
-                <i data-feather="edit-2" style="width:14px;height:14px"></i>
-              </button>
-              <button type="button" class="btn btn-outline-danger" title="Eliminar marca seleccionada"
-                      onclick="eliminarOpcionSeleccionada('marca','sel-marca')">
-                <i data-feather="trash-2" style="width:14px;height:14px"></i>
-              </button>
               <button type="button" class="btn btn-outline-success" title="Agregar nueva marca"
                       onclick="agregarOpcion('marca','sel-marca','Nueva marca (ej: Xiaomi, Alienware...)')">
                 <i data-feather="plus" style="width:14px;height:14px"></i>
@@ -243,8 +227,8 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
       <div class="tr-card-body p-2" id="checklist-container">
         <?php foreach($checklistItems as $item): ?>
-        <div class="checklist-item d-flex align-items-center gap-1" id="chk-row-<?= $item['id'] ?>">
-          <span class="small flex-grow-1"><?= sanitize($item['nombre']) ?></span>
+        <div class="checklist-item" id="chk-row-<?= $item['id'] ?>">
+          <span class="small"><?= sanitize($item['nombre']) ?></span>
           <div class="btn-group btn-group-sm" role="group">
             <?php foreach(['bueno'=>'Bueno','malo'=>'Malo','no_aplica'=>'N/A'] as $val=>$txt): ?>
             <input type="radio" class="btn-check" name="check_item_<?= $item['id'] ?>" id="c_<?= $item['id'] ?>_<?= $val ?>" value="<?= $val ?>" <?= $val==='no_aplica'?'checked':'' ?>>
@@ -252,14 +236,6 @@ require_once __DIR__ . '/../../includes/header.php';
                    for="c_<?= $item['id'] ?>_<?= $val ?>" style="font-size:11px"><?= $txt ?></label>
             <?php endforeach; ?>
           </div>
-          <button type="button" class="btn btn-outline-warning btn-sm py-0 px-1" title="Editar"
-                  onclick="editarChecklistItem(<?= $item['id'] ?>, this)" style="border:none">
-            <i data-feather="edit-2" style="width:11px;height:11px"></i>
-          </button>
-          <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar"
-                  onclick="eliminarChecklistItem(<?= $item['id'] ?>)" style="border:none">
-            <i data-feather="trash-2" style="width:11px;height:11px"></i>
-          </button>
         </div>
         <?php endforeach; ?>
         <div class="mt-2">
@@ -553,85 +529,6 @@ document.getElementById('input-nuevo-check').addEventListener('keydown', e => {
 
 function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ── Editar opción seleccionada en select (tipo equipo o marca) ──
-async function editarOpcionSeleccionada(accion, selectId) {
-  const sel = document.getElementById(selectId);
-  const opt = sel.options[sel.selectedIndex];
-  if (!opt || !opt.value) { alert('Selecciona un elemento para editar.'); return; }
-  const nuevoNombre = prompt('Nuevo nombre:', opt.text);
-  if (!nuevoNombre || nuevoNombre.trim() === '') return;
-  const id = opt.getAttribute('data-id') || opt.value;
-  const fd = new FormData();
-  fd.append('accion', 'editar_' + accion);
-  fd.append('id', id);
-  fd.append('valor', nuevoNombre.trim());
-  const r = await fetch('api_agregar.php', { method:'POST', body: fd });
-  const d = await r.json();
-  if (d.ok) {
-    opt.text = d.nombre;
-    if (accion === 'marca') opt.value = d.nombre;
-  } else {
-    alert(d.error || 'Error al editar');
-  }
-}
-
-// ── Eliminar opción seleccionada en select (tipo equipo o marca) ──
-async function eliminarOpcionSeleccionada(accion, selectId) {
-  const sel = document.getElementById(selectId);
-  const opt = sel.options[sel.selectedIndex];
-  if (!opt || !opt.value) { alert('Selecciona un elemento para eliminar.'); return; }
-  if (!confirm('¿Eliminar «' + opt.text + '»? Esta acción no se puede deshacer.')) return;
-  const id = opt.getAttribute('data-id') || opt.value;
-  const fd = new FormData();
-  fd.append('accion', 'eliminar_' + accion);
-  fd.append('id', id);
-  fd.append('valor', '_');
-  const r = await fetch('api_agregar.php', { method:'POST', body: fd });
-  const d = await r.json();
-  if (d.ok) {
-    sel.remove(sel.selectedIndex);
-    sel.value = '';
-  } else {
-    alert(d.error || 'Error al eliminar');
-  }
-}
-
-// ── Editar ítem de checklist ──
-async function editarChecklistItem(id, btn) {
-  const row = document.getElementById('chk-row-' + id);
-  const span = row.querySelector('span.small');
-  const nuevoNombre = prompt('Nuevo nombre del ítem:', span.textContent.trim());
-  if (!nuevoNombre || nuevoNombre.trim() === '') return;
-  const fd = new FormData();
-  fd.append('accion', 'editar_checklist_item');
-  fd.append('id', id);
-  fd.append('valor', nuevoNombre.trim());
-  const r = await fetch('api_agregar.php', { method:'POST', body: fd });
-  const d = await r.json();
-  if (d.ok) {
-    span.textContent = d.nombre;
-  } else {
-    alert(d.error || 'Error al editar');
-  }
-}
-
-// ── Eliminar ítem de checklist ──
-async function eliminarChecklistItem(id) {
-  if (!confirm('¿Eliminar este ítem del checklist?')) return;
-  const fd = new FormData();
-  fd.append('accion', 'eliminar_checklist_item');
-  fd.append('id', id);
-  fd.append('valor', '_');
-  const r = await fetch('api_agregar.php', { method:'POST', body: fd });
-  const d = await r.json();
-  if (d.ok) {
-    const row = document.getElementById('chk-row-' + id);
-    if (row) row.remove();
-  } else {
-    alert(d.error || 'Error al eliminar');
-  }
 }
 </script>
 JS;

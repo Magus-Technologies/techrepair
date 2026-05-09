@@ -43,17 +43,15 @@ $repuestos = $repuestos->fetchAll();
 // Checklist
 $checklist = $ot['checklist'] ? json_decode($ot['checklist'], true) : [];
 
-// Config empresa — desde tabla empresa (fuente de verdad)
-$emp = $db->query("SELECT * FROM empresa WHERE id=1")->fetch();
-$empresa    = !empty($emp['nombre_comercial']) ? $emp['nombre_comercial'] : ($emp['razon_social'] ?? APP_NAME);
-$empresaRuc = $emp['ruc']      ?? '';
-$empresaTel = $emp['telefono'] ?? '';
-$empresaDir = (!empty($emp['direccion']) ? $emp['direccion'] : '') . (!empty($emp['distrito']) ? ', '.$emp['distrito'] : '');
-$moneda     = $emp['moneda']   ?? 'S/';
-$empLogoPath = !empty($emp['logo']) ? BASE_PATH.'assets/img/uploads/'.$emp['logo'] : null;
-$empLogoUrl  = !empty($emp['logo']) ? BASE_URL.'assets/img/uploads/'.$emp['logo']  : null;
-$propaganda  = $emp['propaganda'] ?? '';
-$piePagina   = $emp['pie_pagina'] ?? '';
+// Config empresa
+$cfg = [];
+$rows = $db->query("SELECT clave,valor FROM configuracion")->fetchAll();
+foreach ($rows as $r) $cfg[$r['clave']] = $r['valor'];
+$empresa    = $cfg['empresa_nombre']    ?? APP_NAME;
+$empresaRuc = $cfg['empresa_ruc']       ?? '';
+$empresaTel = $cfg['empresa_telefono']  ?? '';
+$empresaDir = $cfg['empresa_direccion'] ?? '';
+$moneda     = $cfg['moneda_simbolo']    ?? 'S/';
 
 // Labels checklist
 $checkLabels = [
@@ -356,12 +354,7 @@ $notaLegal = "El equipo deberá ser recogido en un plazo máximo de 90 días lue
   <!-- ══ HEADER ══ -->
   <div class="doc-header">
     <div class="empresa-info">
-      <?php if ($empLogoUrl): ?>
-      <img src="<?= htmlspecialchars($empLogoUrl) ?>" alt="Logo"
-           style="max-height:60px;max-width:180px;object-fit:contain;margin-bottom:6px;display:block">
-      <?php else: ?>
       <h2><?= htmlspecialchars($empresa) ?></h2>
-      <?php endif; ?>
       <?php if($empresaRuc): ?><p><strong>R.U.C.:</strong> <?= htmlspecialchars($empresaRuc) ?></p><?php endif; ?>
       <?php if($empresaDir): ?><p><?= htmlspecialchars($empresaDir) ?></p><?php endif; ?>
       <?php if($empresaTel): ?><p>📞 <?= htmlspecialchars($empresaTel) ?></p><?php endif; ?>

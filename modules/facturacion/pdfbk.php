@@ -134,12 +134,7 @@ td { padding: 5px 8px; border: 1px solid #ddd; font-size: 11px; }
 <?php else: ?>
 <div class="header">
   <div class="empresa">
-    <?php if (defined('SUNAT_LOGO_URL') && SUNAT_LOGO_URL): ?>
-    <img src="<?= htmlspecialchars(SUNAT_LOGO_URL) ?>" alt="Logo"
-         style="max-height:50px;max-width:160px;object-fit:contain;margin-bottom:6px;display:block">
-    <?php else: ?>
     <h2><?= htmlspecialchars(SUNAT_NOMBRE_COMERCIAL) ?></h2>
-    <?php endif; ?>
     <div><?= htmlspecialchars(SUNAT_RAZON_SOCIAL) ?></div>
     <div>RUC: <?= SUNAT_RUC ?></div>
     <div><?= htmlspecialchars(SUNAT_DIRECCION) ?></div>
